@@ -17,28 +17,122 @@
     --flag-1:#2f6fb0; --flag-2:#e8a13a; --flag-3:#c0473b; --flag-4:#3f9d6c; --flag-5:#e9e2d0;
     --shadow:0 18px 50px rgba(0,0,0,.55);
     --r:14px;
+
+    /* === BACKGROUND ====================================================
+       Live-action village backdrop: an image-to-video Wan 2.2 clip looped
+       behind everything. The Tweaks "mood" presets are color-grade
+       OVERLAYS over the video — they don't change the geometry, they
+       just shift the time-of-day feel.
+       =================================================================== */
+    --grade-color:transparent;        /* tint overlay color (per preset) */
+    --grade-strength:0;               /* 0..1 — how strongly to tint */
+    --grade-blend:multiply;           /* mix-blend-mode of the tint */
+    --grade-brightness:1;             /* video brightness multiplier */
+    --grade-contrast:1;
+    --grade-saturate:1;
+    --grade-hue:0deg;
+    --snow-opacity:.55;
+    --flag-opacity:.95;
   }
+
+  /* MONSOON — the source video's native look. Clean, no tint. */
+  :root[data-bg="monsoon"]{
+    --grade-color:transparent; --grade-strength:0;
+    --grade-brightness:1; --grade-contrast:1; --grade-saturate:1; --grade-hue:0deg;
+    --snow-opacity:.85;
+  }
+  /* DAWN — warm peach wash, slightly boosted. */
+  :root[data-bg="dawn"]{
+    --grade-color:#ffb37a; --grade-strength:.45; --grade-blend:soft-light;
+    --grade-brightness:1.05; --grade-contrast:1.05; --grade-saturate:1.15; --grade-hue:-6deg;
+    --snow-opacity:.55;
+  }
+  /* DUSK — deep magenta/indigo, dimmed. */
+  :root[data-bg="dusk"]{
+    --grade-color:#5a2348; --grade-strength:.55; --grade-blend:multiply;
+    --grade-brightness:.78; --grade-contrast:1.15; --grade-saturate:1.1; --grade-hue:20deg;
+    --snow-opacity:.5;
+  }
+  /* NIGHT — deep ink-blue, strongly dimmed. */
+  :root[data-bg="night"]{
+    --grade-color:#0a1428; --grade-strength:.75; --grade-blend:multiply;
+    --grade-brightness:.5; --grade-contrast:1.2; --grade-saturate:.9; --grade-hue:-10deg;
+    --snow-opacity:.7;
+  }
+
   *{box-sizing:border-box}
   html,body{margin:0;height:100%}
   body{
     font-family:"Mukta",system-ui,sans-serif; color:var(--bone);
-    background:radial-gradient(1200px 700px at 50% -10%, #20303f 0%, var(--ink) 60%, #070a0e 100%);
+    background:#05080c;
     overflow-x:hidden; min-height:100%;
     -webkit-font-smoothing:antialiased;
   }
+
+  /* =====================================================================
+     BACKGROUND LAYERS (back → front)
+       .sky        full-bleed container
+       .bg-video   the looping clip (Wan 2.2 over Gemini still)
+       .bg-grade   the mood tint that sits on top of the video
+       .bg-shade   a bottom-weighted darkening gradient so the UI reads
+       .flags      prayer-flag string (not in the source footage)
+       .snow       fine particle layer in the foreground
+       .grain      film grain
+       .vignette   edge darkening to focus eye on game
+     ===================================================================== */
   .sky{position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden}
-  .mist{position:absolute; left:-20%; right:-20%; height:60vh; opacity:.5;
-    background:radial-gradient(60% 100% at 50% 100%, rgba(120,150,180,.18), transparent 70%);
-    filter:blur(8px); animation:drift 26s ease-in-out infinite alternate;}
-  .mist.m2{top:18vh; opacity:.35; animation-duration:34s; animation-direction:alternate-reverse}
-  .mist.m3{top:42vh; opacity:.25; animation-duration:42s}
-  @keyframes drift{from{transform:translateX(-4%)}to{transform:translateX(4%)}}
-  .ridge{position:absolute; bottom:0; left:0; right:0; height:42vh; opacity:.6;
+
+  .bg-video{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; object-position:center 55%;
+    filter:brightness(var(--grade-brightness)) contrast(var(--grade-contrast))
+           saturate(var(--grade-saturate)) hue-rotate(var(--grade-hue));
+    opacity:0;
+    transition:opacity 1.2s ease, filter .8s ease;
+    /* the video poster (still frame) shows instantly while the mp4 buffers */
+  }
+  .bg-video.is-active{ opacity:1; }
+  /* "Live video" tweak off → both layers go dark, posters take over */
+  .sky.video-off .bg-video{ opacity:0 !important; }
+
+  .bg-grade{position:absolute; inset:0;
+    background:var(--grade-color); opacity:var(--grade-strength);
+    mix-blend-mode:var(--grade-blend); transition:.8s ease;}
+
+  /* bottom-weighted darkening so the moves/log/scroll read on the snowy plate */
+  .bg-shade{position:absolute; inset:0; pointer-events:none;
     background:
-      linear-gradient(to top, #060a0e 0%, transparent 100%),
-      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1440' height='320' viewBox='0 0 1440 320'><path fill='%230b1118' d='M0,320 L0,180 L160,120 L300,200 L440,90 L620,210 L780,70 L960,190 L1140,100 L1300,200 L1440,140 L1440,320 Z'/></svg>") bottom/cover no-repeat;}
+      linear-gradient(180deg, rgba(8,12,18,0) 0%, rgba(8,12,18,.15) 40%, rgba(8,12,18,.65) 78%, rgba(8,12,18,.88) 100%),
+      radial-gradient(70% 60% at 50% 30%, rgba(8,12,18,0) 60%, rgba(8,12,18,.35) 100%);
+    transition:.8s ease;}
+
+  /* prayer flag string spanning the upper scene */
+  .flags{position:absolute; top:10vh; left:5%; right:5%; height:64px;
+    pointer-events:none; opacity:var(--flag-opacity); transition:opacity .6s ease;
+    animation:flagsSway 9s ease-in-out infinite alternate;
+    filter:drop-shadow(0 4px 8px rgba(0,0,0,.4));}
+  @keyframes flagsSway{from{transform:translateY(-2px) rotate(-.2deg)}to{transform:translateY(2px) rotate(.2deg)}}
+
+  /* foreground snow */
+  .snow{position:absolute; inset:0; pointer-events:none; opacity:var(--snow-opacity);
+    transition:opacity .6s ease;}
+  .snow .flake{position:absolute; top:-10px; width:3px; height:3px; border-radius:50%;
+    background:#fff; box-shadow:0 0 4px rgba(255,255,255,.6);
+    animation:fall linear infinite;}
+  @keyframes fall{
+    0%  {transform:translate(0,-10px); opacity:0}
+    10% {opacity:1}
+    90% {opacity:1}
+    100%{transform:translate(40px, 105vh); opacity:0}
+  }
+
+  /* subtle grain (kept) */
   .grain{position:fixed; inset:0; z-index:1; pointer-events:none; opacity:.05; mix-blend-mode:overlay;
     background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");}
+
+  /* edge vignette */
+  .vignette{position:fixed; inset:0; z-index:1; pointer-events:none;
+    background:radial-gradient(130% 90% at 50% 55%, transparent 45%, rgba(0,0,0,.55) 100%);}
 
   .wrap{position:relative; z-index:2; max-width:960px; margin:0 auto; padding:22px 18px 40px}
 
@@ -57,7 +151,7 @@
   .pip.on{background:currentColor}
   .backend{font-size:10.5px; color:var(--bone-dim); letter-spacing:.08em; text-transform:uppercase; margin-top:6px; text-align:right; opacity:.7}
 
-  /* the battle stage — a single shared scene with both fighters */
+  /* battle stage */
   .stage{
     position:relative; height:240px; margin:0 0 12px;
     border:1px solid var(--line); border-radius:var(--r);
@@ -81,30 +175,16 @@
   .stage .lantern.l3{right:14%; animation-delay:-2s}
   @keyframes sway{from{transform:translateX(-3px)}to{transform:translateX(3px)}}
 
-  /* fighter slot inside the stage */
-  .slot{
-    position:absolute; bottom:18px; width:120px; height:180px;
-    display:flex; align-items:flex-end; justify-content:center;
-  }
+  .slot{position:absolute; bottom:18px; width:120px; height:180px;
+    display:flex; align-items:flex-end; justify-content:center;}
   .slot.left{left:8%} .slot.right{right:8%}
-  .slot .shadow{
-    position:absolute; bottom:6px; left:50%; transform:translateX(-50%);
+  .slot .shadow{position:absolute; bottom:6px; left:50%; transform:translateX(-50%);
     width:78px; height:10px; border-radius:50%;
-    background:radial-gradient(ellipse, rgba(0,0,0,.55), transparent 70%);
-    filter:blur(2px);
-  }
-
-  .sprite{
-    width:96px; height:120px;
-    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:radial-gradient(ellipse, rgba(0,0,0,.55), transparent 70%); filter:blur(2px);}
+  .sprite{width:96px; height:120px; image-rendering:pixelated; image-rendering:crisp-edges;
     transition:transform .35s cubic-bezier(.2,.8,.2,1), filter .3s, opacity .3s;
-    position:relative; z-index:2;
-    filter:drop-shadow(0 4px 6px rgba(0,0,0,.6));
-  }
+    position:relative; z-index:2; filter:drop-shadow(0 4px 6px rgba(0,0,0,.6));}
   .slot.right .sprite{transform:scaleX(-1)}
-
-  /* per-move pose animations. each is symmetric; the .right scaleX(-1)
-     mirrors them so both fighters lunge "forward" toward center. */
   .slot.left  .sprite.pose-strike    { animation:lungeR .55s ease-out }
   .slot.right .sprite.pose-strike    { animation:lungeL .55s ease-out }
   .slot.left  .sprite.pose-grapple   { animation:lungeR .7s ease-in-out }
@@ -119,133 +199,52 @@
   .slot.right .sprite.pose-mist_step { animation:vanish .9s ease-in-out; transform:scaleX(-1) }
   .slot.left  .sprite.hit            { animation:hitL .45s ease-out }
   .slot.right .sprite.hit            { animation:hitR .45s ease-out }
+  @keyframes lungeR{0%{transform:translateX(0) scaleX(1)}25%{transform:translateX(-10px) scaleX(1)}55%{transform:translateX(40px) scaleX(1) skewX(-6deg)}100%{transform:translateX(0) scaleX(1)}}
+  @keyframes lungeL{0%{transform:scaleX(-1) translateX(0)}25%{transform:scaleX(-1) translateX(-10px)}55%{transform:scaleX(-1) translateX(40px) skewX(-6deg)}100%{transform:scaleX(-1) translateX(0)}}
+  @keyframes brace{0%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}50%{filter:drop-shadow(0 0 12px var(--accent)) drop-shadow(0 0 24px var(--accent))}100%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}}
+  @keyframes breathe{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px); filter:drop-shadow(0 -6px 14px var(--ember))}}
+  @keyframes cast{0%{transform:translateY(0)}35%{transform:translateY(-4px); filter:drop-shadow(0 0 18px var(--ember-2))}100%{transform:translateY(0)}}
+  @keyframes vanish{0%{opacity:1; filter:blur(0)}40%{opacity:.15; filter:blur(6px)}70%{opacity:.15; filter:blur(6px); transform:translateX(20px)}100%{opacity:1; filter:blur(0)}}
+  @keyframes hitL{0%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}20%{transform:translateX(-12px); filter:drop-shadow(0 0 14px var(--crimson)) brightness(2)}50%{transform:translateX(4px)}100%{transform:translateX(0)}}
+  @keyframes hitR{0%{transform:scaleX(-1); filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}20%{transform:scaleX(-1) translateX(-12px); filter:drop-shadow(0 0 14px var(--crimson)) brightness(2)}50%{transform:scaleX(-1) translateX(4px)}100%{transform:scaleX(-1) translateX(0)}}
 
-  @keyframes lungeR{
-    0%{transform:translateX(0) scaleX(1)}
-    25%{transform:translateX(-10px) scaleX(1)}
-    55%{transform:translateX(40px) scaleX(1) skewX(-6deg)}
-    100%{transform:translateX(0) scaleX(1)}
-  }
-  @keyframes lungeL{
-    0%{transform:scaleX(-1) translateX(0)}
-    25%{transform:scaleX(-1) translateX(-10px)}
-    55%{transform:scaleX(-1) translateX(40px) skewX(-6deg)}
-    100%{transform:scaleX(-1) translateX(0)}
-  }
-  @keyframes brace{
-    0%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}
-    50%{filter:drop-shadow(0 0 12px var(--accent)) drop-shadow(0 0 24px var(--accent))}
-    100%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}
-  }
-  @keyframes breathe{
-    0%,100%{transform:translateY(0)}
-    50%{transform:translateY(-6px); filter:drop-shadow(0 -6px 14px var(--ember))}
-  }
-  @keyframes cast{
-    0%{transform:translateY(0)}
-    35%{transform:translateY(-4px); filter:drop-shadow(0 0 18px var(--ember-2))}
-    100%{transform:translateY(0)}
-  }
-  @keyframes vanish{
-    0%{opacity:1; filter:blur(0)}
-    40%{opacity:.15; filter:blur(6px)}
-    70%{opacity:.15; filter:blur(6px); transform:translateX(20px)}
-    100%{opacity:1; filter:blur(0)}
-  }
-  @keyframes hitL{
-    0%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}
-    20%{transform:translateX(-12px); filter:drop-shadow(0 0 14px var(--crimson)) brightness(2)}
-    50%{transform:translateX(4px)}
-    100%{transform:translateX(0)}
-  }
-  @keyframes hitR{
-    0%{transform:scaleX(-1); filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}
-    20%{transform:scaleX(-1) translateX(-12px); filter:drop-shadow(0 0 14px var(--crimson)) brightness(2)}
-    50%{transform:scaleX(-1) translateX(4px)}
-    100%{transform:scaleX(-1) translateX(0)}
-  }
-
-  /* in-stage effect layers: projectiles, mist, aura, impact spark */
   .fx{position:absolute; inset:0; pointer-events:none; z-index:3}
-  .projectile{
-    position:absolute; width:18px; height:18px; border-radius:50%;
+  .projectile{position:absolute; width:18px; height:18px; border-radius:50%;
     background:radial-gradient(circle, #fff, var(--ember-2) 40%, var(--ember) 75%, transparent 100%);
     box-shadow:0 0 22px var(--ember), 0 0 42px var(--ember-2);
-    animation:projFly .55s linear forwards;
-  }
+    animation:projFly .55s linear forwards;}
   .projectile.rev{animation:projFlyRev .55s linear forwards}
-  @keyframes projFly{
-    from{left:18%; bottom:90px; transform:scale(.4)}
-    to  {left:82%; bottom:110px; transform:scale(1.4)}
-  }
-  @keyframes projFlyRev{
-    from{right:18%; bottom:90px; transform:scale(.4)}
-    to  {right:82%; bottom:110px; transform:scale(1.4)}
-  }
-  .impact{
-    position:absolute; width:60px; height:60px; border-radius:50%;
+  @keyframes projFly{from{left:18%; bottom:90px; transform:scale(.4)}to{left:82%; bottom:110px; transform:scale(1.4)}}
+  @keyframes projFlyRev{from{right:18%; bottom:90px; transform:scale(.4)}to{right:82%; bottom:110px; transform:scale(1.4)}}
+  .impact{position:absolute; width:60px; height:60px; border-radius:50%;
     background:radial-gradient(circle, #fff 0%, var(--crimson) 30%, transparent 70%);
     transform:translate(-50%,-50%) scale(.2); opacity:0;
-    animation:impactPop .45s ease-out forwards;
-  }
-  @keyframes impactPop{
-    0%{opacity:0; transform:translate(-50%,-50%) scale(.2)}
-    30%{opacity:1; transform:translate(-50%,-50%) scale(1)}
-    100%{opacity:0; transform:translate(-50%,-50%) scale(1.6)}
-  }
-  .mistpuff{
-    position:absolute; width:120px; height:120px; border-radius:50%;
+    animation:impactPop .45s ease-out forwards;}
+  @keyframes impactPop{0%{opacity:0; transform:translate(-50%,-50%) scale(.2)}30%{opacity:1; transform:translate(-50%,-50%) scale(1)}100%{opacity:0; transform:translate(-50%,-50%) scale(1.6)}}
+  .mistpuff{position:absolute; width:120px; height:120px; border-radius:50%;
     background:radial-gradient(circle, rgba(207,232,240,.55), transparent 65%);
     transform:translate(-50%,-50%) scale(.4); opacity:0;
-    animation:mistGrow .9s ease-out forwards;
-    filter:blur(2px);
-  }
-  @keyframes mistGrow{
-    0%{opacity:0; transform:translate(-50%,-50%) scale(.4)}
-    25%{opacity:.9}
-    100%{opacity:0; transform:translate(-50%,-50%) scale(1.8)}
-  }
-  .aura{
-    position:absolute; width:90px; height:90px; border-radius:50%;
+    animation:mistGrow .9s ease-out forwards; filter:blur(2px);}
+  @keyframes mistGrow{0%{opacity:0; transform:translate(-50%,-50%) scale(.4)}25%{opacity:.9}100%{opacity:0; transform:translate(-50%,-50%) scale(1.8)}}
+  .aura{position:absolute; width:90px; height:90px; border-radius:50%;
     border:2px solid var(--accent); opacity:0;
     transform:translate(-50%,-50%) scale(.5);
     animation:auraPulse .55s ease-out forwards;
-    box-shadow:0 0 24px var(--accent), inset 0 0 22px var(--accent);
-  }
-  @keyframes auraPulse{
-    0%{opacity:0; transform:translate(-50%,-50%) scale(.5)}
-    40%{opacity:1; transform:translate(-50%,-50%) scale(1.05)}
-    100%{opacity:0; transform:translate(-50%,-50%) scale(1.4)}
-  }
-  .breath{
-    position:absolute; width:30px; height:60px;
+    box-shadow:0 0 24px var(--accent), inset 0 0 22px var(--accent);}
+  @keyframes auraPulse{0%{opacity:0; transform:translate(-50%,-50%) scale(.5)}40%{opacity:1; transform:translate(-50%,-50%) scale(1.05)}100%{opacity:0; transform:translate(-50%,-50%) scale(1.4)}}
+  .breath{position:absolute; width:30px; height:60px;
     background:radial-gradient(ellipse at 50% 100%, var(--ember-2), transparent 70%);
     opacity:0; transform:translateX(-50%);
-    animation:breathRise 1.1s ease-out forwards;
-    filter:blur(1px);
-  }
-  @keyframes breathRise{
-    0%{opacity:0; transform:translateX(-50%) translateY(0) scaleY(.4)}
-    30%{opacity:.9}
-    100%{opacity:0; transform:translateX(-50%) translateY(-50px) scaleY(1.2)}
-  }
-  .move-banner{
-    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    animation:breathRise 1.1s ease-out forwards; filter:blur(1px);}
+  @keyframes breathRise{0%{opacity:0; transform:translateX(-50%) translateY(0) scaleY(.4)}30%{opacity:.9}100%{opacity:0; transform:translateX(-50%) translateY(-50px) scaleY(1.2)}}
+  .move-banner{position:absolute; top:14px; left:50%; transform:translateX(-50%);
     font-family:"VT323",monospace; font-size:22px; letter-spacing:.14em;
     color:var(--accent); text-shadow:0 0 10px var(--accent);
-    opacity:0; animation:bannerIn .9s ease-out forwards;
-    white-space:nowrap;
-  }
-  @keyframes bannerIn{
-    0%{opacity:0; transform:translateX(-50%) translateY(-6px)}
-    20%{opacity:1; transform:translateX(-50%) translateY(0)}
-    80%{opacity:1}
-    100%{opacity:0; transform:translateX(-50%) translateY(-4px)}
-  }
+    opacity:0; animation:bannerIn .9s ease-out forwards; white-space:nowrap;}
+  @keyframes bannerIn{0%{opacity:0; transform:translateX(-50%) translateY(-6px)}20%{opacity:1; transform:translateX(-50%) translateY(0)}80%{opacity:1}100%{opacity:0; transform:translateX(-50%) translateY(-4px)}}
   .move-banner .vs{color:var(--ember-2); text-shadow:0 0 8px var(--ember-2); margin:0 .5em}
   .move-banner .pl{color:var(--ember-2); text-shadow:0 0 8px var(--ember-2)}
 
-  /* fighter info panels — slimmer now, since the visual is on the stage */
   .info-row{display:grid; grid-template-columns:1fr 1fr; gap:12px}
   .fighter{background:linear-gradient(180deg,var(--panel),var(--panel-2)); border:1px solid var(--line);
     border-radius:var(--r); padding:12px 14px; box-shadow:var(--shadow); position:relative; overflow:hidden}
@@ -263,7 +262,6 @@
   .drop.full{background:radial-gradient(circle at 40% 30%, var(--ember-2), var(--ember)); border-color:var(--ember);
     box-shadow:0 0 9px -1px var(--ember)}
 
-  /* the mind-scroll */
   .scroll{margin-top:12px; background:
       linear-gradient(180deg, rgba(233,226,208,.06), rgba(233,226,208,.02)),
       var(--ink-2);
@@ -280,7 +278,6 @@
   .reading::after{content:"\2026"; animation:blink 1.2s steps(4) infinite}
   @keyframes blink{0%{opacity:.2}50%{opacity:1}100%{opacity:.2}}
 
-  /* moves */
   .moves{display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-top:12px}
   @media(min-width:620px){.moves{grid-template-columns:repeat(6,1fr)}}
   .mv{appearance:none; cursor:pointer; text-align:left; color:var(--bone);
@@ -296,7 +293,6 @@
     border-top:1px dashed var(--line); padding-top:10px}
   .log b{color:var(--bone); font-weight:500}
 
-  /* overlays */
   .ov{position:fixed; inset:0; z-index:20; display:grid; place-items:center; padding:24px;
     background:radial-gradient(800px 500px at 50% 40%, rgba(20,30,42,.9), rgba(5,8,12,.96)); backdrop-filter:blur(3px)}
   .ov.hide{display:none}
@@ -317,10 +313,125 @@
   @keyframes fl{from{opacity:0; transform:translateY(8px) scale(.9)}20%{opacity:1}to{opacity:0; transform:translateY(-26px)}}
   .shake{animation:shake .4s}
   @keyframes shake{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+  /* === TWEAKS PANEL =================================================== */
+  .tweaks{position:fixed; right:18px; bottom:18px; z-index:50; width:240px;
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line); border-radius:14px;
+    box-shadow:0 24px 60px -20px rgba(0,0,0,.7), 0 0 0 1px rgba(0,0,0,.4);
+    padding:14px 14px 12px; color:var(--bone); font-family:"Mukta",sans-serif;
+    display:none;}
+  .tweaks.open{display:block}
+  .tweaks h4{margin:0 0 10px; font-family:"Eczar"; font-weight:600; font-size:14px;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--bone-dim);
+    display:flex; justify-content:space-between; align-items:center}
+  .tweaks h4 .x{cursor:pointer; opacity:.6; padding:2px 6px; border-radius:4px;
+    font-family:"VT323",monospace; font-size:18px; line-height:1}
+  .tweaks h4 .x:hover{opacity:1; background:rgba(255,255,255,.05)}
+  .tweaks .group{margin-bottom:10px}
+  .tweaks .lbl{font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--bone-dim); margin-bottom:6px}
+  .tweaks .opts{display:grid; grid-template-columns:repeat(2,1fr); gap:6px}
+  .tweaks .arena-opts{grid-template-columns:1fr}
+  .tweaks .opt{appearance:none; cursor:pointer; color:var(--bone); text-align:left;
+    background:#0e151d; border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; font-family:inherit; font-size:12.5px; transition:.15s;
+    display:flex; align-items:center; gap:8px}
+  .tweaks .opt:hover{border-color:var(--ember)}
+  .tweaks .opt.active{border-color:var(--ember); background:linear-gradient(180deg,#1a232f,#0e151d);
+    box-shadow:inset 0 0 0 1px var(--ember)}
+  .tweaks .swatch{width:14px; height:14px; border-radius:4px; flex-shrink:0;
+    border:1px solid rgba(255,255,255,.15)}
+  .tweaks .toggle-row{display:flex; align-items:center; justify-content:space-between;
+    background:#0e151d; border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+    font-size:12.5px}
+  .tweaks .switch{width:32px; height:18px; border-radius:10px; background:#222d3a;
+    position:relative; cursor:pointer; border:1px solid var(--line); transition:.2s}
+  .tweaks .switch::after{content:""; position:absolute; top:1px; left:1px; width:14px; height:14px;
+    border-radius:50%; background:var(--bone-dim); transition:.2s}
+  .tweaks .switch.on{background:var(--ember)}
+  .tweaks .switch.on::after{left:15px; background:#fff}
+
+  /* === IDENTITY (on intro card) ====================================== */
+  .ident{margin:14px auto 6px; max-width:300px; text-align:left}
+  .ident-lbl{font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--bone-dim); margin-bottom:6px; text-align:center}
+  .ident-input{width:100%; padding:10px 12px; font-family:"Mukta"; font-size:14px;
+    color:var(--bone); background:#0e151d; border:1px solid var(--line);
+    border-radius:10px; outline:none; transition:.15s; text-align:center;
+    letter-spacing:.04em}
+  .ident-input:focus{border-color:var(--ember); box-shadow:0 0 0 3px rgba(232,161,58,.18)}
+  .ident-cta{margin-top:10px; font-size:12.5px; color:var(--bone-dim); text-align:center}
+  .ident-link{color:var(--ember-2); text-decoration:none; border-bottom:1px dashed var(--ember-2);
+    padding-bottom:1px; font-weight:600}
+  .ident-link:hover{color:#fff; border-color:#fff}
+  .ident-or{display:block; margin-top:4px; font-size:11.5px; opacity:.7}
+  .ident-status{margin-top:8px; font-size:11.5px; color:var(--accent); text-align:center; min-height:1em}
+
+  /* === HEADER LEADERBOARD LINK ======================================== */
+  .lb-link{appearance:none; cursor:pointer; margin-top:6px; font-family:"Mukta";
+    font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent); background:transparent; border:1px solid var(--line);
+    border-radius:6px; padding:4px 9px; transition:.15s}
+  .lb-link:hover{border-color:var(--accent); background:rgba(207,232,240,.08)}
+
+  /* === LEADERBOARD MODAL ============================================== */
+  .lb-card{max-width:560px}
+  .lb-status{font-size:11.5px; color:var(--bone-dim); margin:4px 0 8px; min-height:1em; letter-spacing:.03em}
+  .lb-table{margin:12px 0 6px; max-height:360px; overflow:auto; text-align:left;
+    border-top:1px dashed var(--line); border-bottom:1px dashed var(--line); padding:8px 0}
+  .lb-row{display:grid; grid-template-columns:32px 1fr 64px 76px; gap:8px; align-items:baseline;
+    padding:6px 4px; font-size:13px; border-radius:6px}
+  .lb-row.head{font-size:10.5px; color:var(--bone-dim); letter-spacing:.12em;
+    text-transform:uppercase; border-bottom:1px solid var(--line); padding-bottom:8px; margin-bottom:4px}
+  .lb-row.you{background:rgba(232,161,58,.12); box-shadow:inset 0 0 0 1px rgba(232,161,58,.35)}
+  .lb-row .rk{font-family:"VT323",monospace; font-size:18px; color:var(--ember-2); text-align:center}
+  .lb-row .nm{font-family:"Eczar"; font-weight:600; color:var(--bone); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .lb-row .nm .verified{color:var(--accent); font-size:10px; margin-left:4px; vertical-align:middle}
+  .lb-row .tn{font-family:"VT323",monospace; font-size:17px; color:var(--bone); text-align:right}
+  .lb-row .tm{font-family:"VT323",monospace; font-size:17px; color:var(--bone-dim); text-align:right}
+  .lb-empty{padding:24px 8px; text-align:center; color:var(--bone-dim); font-style:italic; font-size:13.5px}
 </style>
 </head>
 <body>
-  <div class="sky"><div class="mist"></div><div class="mist m2"></div><div class="mist m3"></div><div class="ridge"></div></div>
+  <!-- =============================================================
+       BACKGROUND SCENE
+       A looping Wan-2.2 clip generated from a Gemini still of a snowy
+       Himalayan village. The image acts as the poster (instant first
+       paint); the video takes over once it buffers. Color grading and
+       foreground extras (flags, snow) sit on top as separate layers.
+       ============================================================= -->
+  <div class="sky" id="sky">
+    <!-- Two stacked video layers; we crossfade between them when the
+         arena changes. A is the visible one at boot. -->
+    <video class="bg-video is-active" id="bgVideoA"
+           autoplay muted loop playsinline preload="auto"
+           poster="assets/village.webp"
+           aria-hidden="true">
+      <source src="assets/village.mp4" type="video/mp4" />
+    </video>
+    <video class="bg-video" id="bgVideoB"
+           muted loop playsinline preload="auto"
+           aria-hidden="true"></video>
+    <div class="bg-grade"></div>
+    <div class="bg-shade"></div>
+
+    <!-- pieces the source footage doesn't have, layered on top -->
+    <!-- PRAYER FLAGS — a slack catenary string with five colored flags repeated -->
+    <svg class="flags" viewBox="0 0 1200 60" preserveAspectRatio="none" aria-hidden="true">
+      <!-- string -->
+      <path d="M0,8 Q300,42 600,30 T1200,8" stroke="#0a0e14" stroke-width="1.2" fill="none" opacity=".7"/>
+      <!-- flags hang from the string. Each flag is a small rect with a slight skew.
+           We repeat the 5-color cycle (blue/white/red/green/yellow) across the span. -->
+      <g id="flagrow">
+        <!-- group of 5 flags; the JS below clones it across the string -->
+      </g>
+    </svg>
+
+    <!-- snow / particles layer (built by JS) -->
+    <div class="snow" id="snow"></div>
+  </div>
+  <div class="vignette"></div>
   <div class="grain"></div>
 
   <div class="wrap">
@@ -333,34 +444,21 @@
       <div style="text-align:right">
         <div class="pips" id="pips"></div>
         <div class="backend" id="backend"></div>
+        <button class="lb-link" id="openLb" title="Show the climbers' board">▲ Leaderboard</button>
       </div>
     </header>
 
-    <!-- BATTLE STAGE: both fighters share one scene -->
     <div class="stage" id="stage">
       <div class="lantern l1"></div><div class="lantern l2"></div><div class="lantern l3"></div>
-
-      <div class="slot right" id="slotOpp">
-        <div class="shadow"></div>
-        <div class="sprite" id="oppSprite"></div>
-      </div>
-
-      <div class="slot left" id="slotPl">
-        <div class="shadow"></div>
-        <div class="sprite" id="plSprite"></div>
-      </div>
-
+      <div class="slot right" id="slotOpp"><div class="shadow"></div><div class="sprite" id="oppSprite"></div></div>
+      <div class="slot left" id="slotPl"><div class="shadow"></div><div class="sprite" id="plSprite"></div></div>
       <div class="fx" id="fx"></div>
       <div class="ground"></div>
     </div>
 
-    <!-- INFO PANELS: name / HP / prana side by side -->
     <div class="info-row">
       <div class="fighter player" id="plPanel">
-        <div class="who">
-          <div class="nm">You</div>
-          <div class="ti">challenger of the hidden village</div>
-        </div>
+        <div class="who"><div class="nm">You</div><div class="ti">challenger of the hidden village</div></div>
         <div class="bars">
           <div class="bar hp"><i id="plHp" style="width:100%"></i></div>
           <div class="meta-line"><span id="plHpTxt">100 HP</span><span>prana</span></div>
@@ -370,10 +468,7 @@
       </div>
 
       <div class="fighter opp" id="oppPanel">
-        <div class="who">
-          <div class="nm" id="oppName">—</div>
-          <div class="ti" id="oppTitle"></div>
-        </div>
+        <div class="who"><div class="nm" id="oppName">—</div><div class="ti" id="oppTitle"></div></div>
         <div class="bars">
           <div class="bar hp"><i id="oppHp" style="width:100%"></i></div>
           <div class="meta-line"><span id="oppHpTxt">100 HP</span><span>prana</span></div>
@@ -383,7 +478,6 @@
       </div>
     </div>
 
-    <!-- MIND-SCROLL -->
     <div class="scroll" id="scroll">
       <div class="hdr"><span class="dot"></span><span id="scrollLabel">the mind of your opponent</span></div>
       <div class="think reading" id="think">awaiting the opening round.</div>
@@ -394,421 +488,626 @@
     <div class="log" id="log"></div>
   </div>
 
-  <!-- intro / versus overlay -->
+  <!-- Tweaks panel (background mood presets + density toggles) -->
+  <div class="tweaks" id="tweaks">
+    <h4><span>Tweaks · Mist</span><span class="x" id="tweaksClose">×</span></h4>
+
+    <div class="group">
+      <div class="lbl">Background mood</div>
+      <div class="opts" id="bgOpts">
+        <button class="opt" data-bg="monsoon"><span class="swatch" style="background:linear-gradient(180deg,#3a4a5c,#0c1218)"></span>Monsoon</button>
+        <button class="opt" data-bg="dawn"><span class="swatch" style="background:linear-gradient(180deg,#7a5a64,#1b1517)"></span>Dawn</button>
+        <button class="opt" data-bg="dusk"><span class="swatch" style="background:linear-gradient(180deg,#3a1f3a,#0a070d)"></span>Dusk</button>
+        <button class="opt" data-bg="night"><span class="swatch" style="background:linear-gradient(180deg,#0b1426,#02040a)"></span>Night</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="lbl">Arena</div>
+      <div class="opts arena-opts" id="arenaOpts">
+        <button class="opt" data-arena=""><span class="swatch" style="background:linear-gradient(180deg,#7a8590,#4a525a)"></span>Auto · follow ladder</button>
+        <button class="opt" data-arena="tashi"><span class="swatch" style="background:#cfe8f0"></span>1 · Tashi · Village</button>
+        <button class="opt" data-arena="norbu"><span class="swatch" style="background:#a8c5d8"></span>2 · Norbu · Monastery</button>
+        <button class="opt" data-arena="pema"><span class="swatch" style="background:#e8c0d8"></span>3 · Pema · Pine Grove</button>
+        <button class="opt" data-arena="drogpa"><span class="swatch" style="background:#f3c270"></span>4 · Drogpa · Cliff</button>
+        <button class="opt" data-arena="the-mountain"><span class="swatch" style="background:#ffd089"></span>5 · The Mountain · Summit</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="lbl">Effects</div>
+      <div class="toggle-row" id="snowRow">
+        <span>Falling snow</span>
+        <div class="switch on" id="snowSwitch"></div>
+      </div>
+      <div style="height:6px"></div>
+      <div class="toggle-row" id="flagsRow">
+        <span>Prayer flags</span>
+        <div class="switch on" id="flagsSwitch"></div>
+      </div>
+      <div style="height:6px"></div>
+      <div class="toggle-row" id="videoRow">
+        <span>Live video</span>
+        <div class="switch on" id="videoSwitch"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="ov" id="overlay">
     <div class="card" id="card">
       <div class="em" id="cardEm">⛰</div>
       <h2 id="cardTitle">The Mind of Tashi</h2>
       <div class="sub" id="cardSub">a duel of foresight in the hidden Himalaya</div>
       <div class="bio" id="cardBio">Five champions guard the path to the summit. Each round you both commit a move in secret — you cannot react, only read. Beat your read, climb the mountain.</div>
+
+      <!-- Identity block: shown on the very first card, hidden on subsequent
+           between-fight cards. On the Space, an HF sign-in CTA appears here;
+           locally, it falls back to a typed name. -->
+      <div class="ident" id="identBlock">
+        <div class="ident-lbl">Sign your name in the snow</div>
+        <input class="ident-input" id="identName" type="text" maxlength="40" placeholder="your climber name" autocomplete="off" />
+        <div class="ident-cta" id="identCta" style="display:none">
+          <a class="ident-link" id="identSignIn" href="#">Sign in with Hugging Face →</a>
+          <span class="ident-or">— or play as a guest above</span>
+        </div>
+        <div class="ident-status" id="identStatus"></div>
+      </div>
+
       <button class="btn" id="cardBtn">Enter the mist</button>
       <div><button class="btn ghost" id="cardBtn2" style="display:none">Walk back down</button></div>
     </div>
   </div>
 
+  <!-- Leaderboard modal -->
+  <div class="ov hide" id="lbOv">
+    <div class="card lb-card">
+      <div class="em">▲</div>
+      <h2>Climbers of the Mist</h2>
+      <div class="sub" id="lbSub">fastest summit clears — by total turns, then time</div>
+      <div class="lb-status" id="lbStatus"></div>
+      <div class="lb-table" id="lbTable"></div>
+      <button class="btn" id="lbClose">Back to the path</button>
+    </div>
+  </div>
+
   <script id="game-meta" type="application/json">__GAME_META__</script>
 
-<script type="module">
-import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
+<script>
+  /* ============================================================
+     PRAYER FLAGS — clone the 5-flag color sequence across the
+     string. Done in JS to keep the SVG markup small.
+     ============================================================ */
+  (function buildFlags(){
+    const svg = document.querySelector(".flags");
+    if (!svg) return;
+    const w = 1200, total = 28, step = w/total;
+    const colors = ["var(--flag-1)","var(--flag-5)","var(--flag-3)","var(--flag-4)","var(--flag-2)"];
+    const ns = "http://www.w3.org/2000/svg";
+    // approximate y on the catenary M0,8 Q300,42 600,30 T1200,8 — use a sampled quadratic
+    const yAt = x => {
+      // piecewise: 0..600 quadratic to (300,42), 600..1200 quadratic to (900,18)
+      if (x <= 600){
+        const t = x/600;
+        return (1-t)*(1-t)*8 + 2*(1-t)*t*42 + t*t*30;
+      } else {
+        const t = (x-600)/600;
+        return (1-t)*(1-t)*30 + 2*(1-t)*t*18 + t*t*8;
+      }
+    };
+    for (let i=0; i<total; i++){
+      const x = step*i + step*.5;
+      const y = yAt(x);
+      const c = colors[i % colors.length];
+      const g = document.createElementNS(ns,"g");
+      g.setAttribute("transform", `translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${(Math.sin(i)*4).toFixed(1)})`);
+      // flag
+      const rect = document.createElementNS(ns,"rect");
+      rect.setAttribute("x","-7"); rect.setAttribute("y","0");
+      rect.setAttribute("width","14"); rect.setAttribute("height","18");
+      rect.setAttribute("fill", c); rect.setAttribute("opacity",".85");
+      g.appendChild(rect);
+      // tiny shadow / fold
+      const fold = document.createElementNS(ns,"rect");
+      fold.setAttribute("x","-7"); fold.setAttribute("y","0");
+      fold.setAttribute("width","14"); fold.setAttribute("height","18");
+      fold.setAttribute("fill","#000"); fold.setAttribute("opacity",".15");
+      g.appendChild(fold);
+      svg.appendChild(g);
+    }
+  })();
 
-const META = JSON.parse(document.getElementById("game-meta").textContent);
-const MOVES = Object.fromEntries(META.moves.map(m => [m.id, m]));
-const $ = id => document.getElementById(id);
+  /* ============================================================
+     SNOW — generate flakes once; positions stagger across viewport
+     ============================================================ */
+  (function buildSnow(){
+    const snow = document.getElementById("snow");
+    const N = 60;
+    for (let i=0; i<N; i++){
+      const f = document.createElement("div");
+      f.className = "flake";
+      const sz = 1 + Math.random()*2.5;
+      f.style.width = f.style.height = sz + "px";
+      f.style.left = (Math.random()*100) + "%";
+      f.style.opacity = .35 + Math.random()*.5;
+      const dur = 12 + Math.random()*18;
+      f.style.animationDuration = dur + "s";
+      f.style.animationDelay = (-Math.random()*dur) + "s";
+      // a touch of horizontal drift via animation override
+      f.style.setProperty("--drift", (Math.random()*40 - 20) + "px");
+      snow.appendChild(f);
+    }
+  })();
 
-let client = null;
-let state = null;
-let ladderIndex = 0;
-let busy = false;
-
-$("backend").textContent = "opponent: " + META.backend;
-renderPips();
-
-(async () => {
-  try { client = await Client.connect(window.location.origin); }
-  catch (e) { console.warn("Gradio client offline:", e); }
-})();
-
-// --------------------------------------------------------------------------
-// PIXEL-SPRITE SYSTEM
-// Each pose is a list of rects on a 16x20 grid. Persona colors come from the
-// opponent's accent; the player has a fixed ember palette. `currentColor`
-// lets us recolor robe pixels via CSS without rebuilding the SVG.
-// --------------------------------------------------------------------------
-const PLAYER_PALETTE = { robe:"#3f7d5a", trim:"#e8a13a", skin:"#d4a373", hair:"#1c1a17", sash:"#c0473b", aura:"#e8a13a" };
-
-function paletteFor(opponent){
-  // tint the monk's robe with the opponent's accent; keep skin/hair stable
-  return { robe:opponent.accent, trim:"#e9e2d0", skin:"#caa074", hair:"#1c1a17", sash:"#0d1117", aura:opponent.accent };
-}
-
-// 16x20 grid; coordinates are (x,y,w,h,colorKey)
-const POSES = {
-  idle: [
-    [7,1,3,2,"hair"],          // hair top
-    [7,3,3,2,"skin"],          // face
-    [8,4,1,1,"hair"],           // brow tuft
-    [6,5,5,4,"robe"],           // torso
-    [6,6,5,1,"trim"],           // collar trim
-    [6,8,5,1,"sash"],           // sash
-    [5,6,1,3,"robe"],           // left shoulder/arm
-    [11,6,1,3,"robe"],          // right shoulder/arm
-    [5,9,1,2,"skin"],           // left hand
-    [11,9,1,2,"skin"],          // right hand
-    [6,9,2,6,"robe"],           // left leg
-    [9,9,2,6,"robe"],           // right leg
-    [5,15,3,1,"hair"],          // left foot
-    [9,15,3,1,"hair"],          // right foot
-  ],
-  strike: [
-    [7,2,3,2,"hair"],
-    [7,4,3,2,"skin"],
-    [6,6,5,3,"robe"],
-    [6,7,5,1,"trim"],
-    [6,8,5,1,"sash"],
-    [4,6,2,1,"robe"],           // rear arm cocked
-    [11,5,3,1,"robe"],          // lead arm extended
-    [14,4,2,3,"robe"],          // forearm
-    [15,3,1,1,"trim"],          // fist glow
-    [15,5,1,3,"skin"],          // fist
-    [5,9,2,5,"robe"],           // rear leg planted
-    [9,9,3,5,"robe"],           // lead leg forward
-    [4,14,3,2,"hair"],
-    [10,14,4,2,"hair"],
-  ],
-  guard: [
-    [7,3,3,2,"hair"],
-    [7,5,3,2,"skin"],
-    [5,7,7,4,"robe"],           // hunkered torso
-    [5,8,7,1,"trim"],
-    [5,10,7,1,"sash"],
-    [4,5,3,3,"robe"],           // arms up across chest L
-    [9,5,3,3,"robe"],           // arms up across chest R
-    [4,7,1,1,"skin"],
-    [11,7,1,1,"skin"],
-    [5,11,3,4,"robe"],          // wide stance L
-    [8,11,3,4,"robe"],          // wide stance R
-    [4,15,4,1,"hair"],
-    [8,15,4,1,"hair"],
-  ],
-  grapple: [
-    [7,2,3,2,"hair"],
-    [7,4,3,2,"skin"],
-    [6,6,5,3,"robe"],
-    [6,7,5,1,"trim"],
-    [6,8,5,1,"sash"],
-    [11,5,3,1,"robe"],          // both arms reach forward
-    [11,7,3,1,"robe"],
-    [14,5,1,3,"skin"],
-    [14,7,1,3,"skin"],
-    [5,9,2,5,"robe"],
-    [9,9,3,5,"robe"],
-    [4,14,3,2,"hair"],
-    [10,14,4,2,"hair"],
-  ],
-  focus: [
-    [7,4,3,2,"hair"],
-    [7,6,3,2,"skin"],            // meditating, eyes closed (no extra brow)
-    [5,8,7,4,"robe"],            // seated/lower body wider
-    [5,9,7,1,"trim"],
-    [5,11,7,1,"sash"],
-    [4,9,2,2,"robe"],            // hands in lap
-    [10,9,2,2,"robe"],
-    [4,11,8,2,"robe"],           // crossed legs
-    [3,13,10,2,"robe"],
-    [3,15,10,1,"hair"],
-  ],
-  art: [
-    [7,1,3,2,"hair"],
-    [7,3,3,2,"skin"],
-    [6,5,5,4,"robe"],
-    [6,6,5,1,"trim"],
-    [6,8,5,1,"sash"],
-    [11,2,2,1,"robe"],           // both arms raised, palms out
-    [13,3,1,3,"robe"],
-    [14,2,2,2,"trim"],           // glow at palm
-    [4,2,2,1,"robe"],
-    [3,3,1,3,"robe"],
-    [2,2,2,2,"trim"],
-    [6,9,2,6,"robe"],
-    [9,9,2,6,"robe"],
-    [5,15,3,1,"hair"],
-    [9,15,3,1,"hair"],
-  ],
-  mist_step: [
-    // partial silhouette — sprite is intentionally sparse; CSS blur sells it
-    [7,2,3,2,"hair"],
-    [7,4,3,2,"skin"],
-    [7,6,3,3,"robe"],
-    [7,7,3,1,"trim"],
-    [11,4,2,1,"robe"],
-    [9,9,1,5,"robe"],
-    [10,14,2,2,"hair"],
-  ],
-};
-
-function spriteSVG(pose, palette){
-  const cells = POSES[pose] || POSES.idle;
-  const pixels = cells.map(([x,y,w,h,k]) =>
-    `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${palette[k] || palette.robe}" shape-rendering="crispEdges"/>`
-  ).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 20" width="100%" height="100%" style="image-rendering:pixelated">${pixels}</svg>`;
-}
-
-function setPose(spriteEl, pose, palette){
-  spriteEl.innerHTML = spriteSVG(pose, palette);
-  // re-trigger any pose animation by reflow
-  spriteEl.classList.remove(...[...spriteEl.classList].filter(c => c.startsWith("pose-") || c === "hit"));
-  void spriteEl.offsetWidth;
-  spriteEl.classList.add("pose-" + pose);
-  // hold the pose visual for ~600ms then return to idle frame (animation already ran)
-  clearTimeout(spriteEl._poseTimer);
-  spriteEl._poseTimer = setTimeout(() => {
-    spriteEl.innerHTML = spriteSVG("idle", palette);
-  }, 700);
-}
-
-// --------------------------------------------------------------------------
-// GAME FLOW
-// --------------------------------------------------------------------------
-let playerPalette = PLAYER_PALETTE;
-let oppPalette = paletteFor(META.ladder[0]);
-
-function renderPips(){
-  const p = $("pips"); p.innerHTML = "";
-  META.ladder.forEach((o,i) => {
-    const d = document.createElement("div");
-    d.className = "pip" + (i < ladderIndex ? " on" : "");
-    p.appendChild(d);
-  });
-}
-
-function newFight(){
-  const opp = META.ladder[ladderIndex];
-  document.documentElement.style.setProperty("--accent", opp.accent);
-  oppPalette = paletteFor(opp);
-  state = {
-    opponent_id: opp.id, round: 1,
-    player_hp: META.max_hp, ai_hp: META.max_hp,
-    player_prana: META.start_prana, ai_prana: META.start_prana,
-    history: [],
+  /* ============================================================
+     ARENAS — one per opponent on the ladder. Each ARENA defines the
+     looping bg video + a poster still. We crossfade between two
+     stacked <video> tags so changing arenas is a 1.2s dissolve, not
+     a hard cut.
+     ============================================================ */
+  const ARENAS = {
+    tashi:    { video:"assets/village.mp4",   poster:"assets/village.webp",   name:"Village" },
+    norbu:    { video:"assets/monastery.mp4", poster:"assets/monastery.webp", name:"Monastery" },
+    pema:     { video:"assets/pinegrove.mp4", poster:"assets/pinegrove.webp", name:"Pine Grove" },
+    drogpa:   { video:"assets/cliff.mp4",     poster:"assets/cliff.webp",     name:"Cliff" },
+    "the-mountain": { video:"assets/summit.mp4", poster:"assets/summit.webp", name:"Summit" },
   };
-  $("oppName").textContent = opp.name;
-  $("oppTitle").textContent = opp.title;
-  $("think").className = "think reading";
-  $("think").textContent = "sizing you up";
-  $("taunt").style.display = "none";
-  $("log").innerHTML = "";
-  $("scrollLabel").textContent = "the mind of " + opp.name;
-  $("plSprite").innerHTML = spriteSVG("idle", playerPalette);
-  $("oppSprite").innerHTML = spriteSVG("idle", oppPalette);
-  $("fx").innerHTML = "";
-  renderMoves(); renderState(); renderPips();
-}
+  let activeBg = "A";              // which of (A,B) is currently visible
+  let currentArenaId = "tashi";    // already-loaded into A at boot
 
-function renderMoves(){
-  const box = $("moves"); box.innerHTML = "";
-  META.moves.forEach(m => {
-    const b = document.createElement("button");
-    b.className = "mv"; b.dataset.move = m.id;
-    b.disabled = state.player_prana < m.cost || busy;
-    b.title = m.blurb;
-    b.innerHTML = `<span class="g">${m.glyph}</span>
-      <span class="l">${m.label}</span>
-      <span class="c ${m.cost? "":"free"}">${m.cost? m.cost+" prana" : "free"}</span>`;
-    b.onclick = () => commit(m.id);
-    box.appendChild(b);
+  function crossfadeTo(arenaId){
+    if (!ARENAS[arenaId] || arenaId === currentArenaId) return;
+    const next = ARENAS[arenaId];
+    const inEl  = document.getElementById(activeBg === "A" ? "bgVideoB" : "bgVideoA");
+    const outEl = document.getElementById(activeBg === "A" ? "bgVideoA" : "bgVideoB");
+    inEl.poster = next.poster;
+    inEl.src    = next.video;
+    inEl.load();
+    const swap = () => {
+      inEl.removeEventListener("canplay", swap);
+      try { inEl.play(); } catch(_){}
+      inEl.classList.add("is-active");
+      outEl.classList.remove("is-active");
+      // pause the outgoing video AFTER its fade so we don't waste decode time
+      setTimeout(() => { try { outEl.pause(); } catch(_){} }, 1300);
+    };
+    inEl.addEventListener("canplay", swap, { once:true });
+    // safety: if canplay never fires (e.g. cached + cold path), force-swap
+    setTimeout(() => { if (!inEl.classList.contains("is-active")) swap(); }, 1200);
+    activeBg = (activeBg === "A" ? "B" : "A");
+    currentArenaId = arenaId;
+  }
+
+  /* ============================================================
+     TWEAKS PANEL — host protocol + state persistence
+     ============================================================ */
+  const TWEAKS = /*EDITMODE-BEGIN*/{
+    "bg": "dawn",
+    "arena": "",
+    "snow": true,
+    "flags": true,
+    "video": true
+  }/*EDITMODE-END*/;
+
+  function applyTweaks(){
+    document.documentElement.setAttribute("data-bg", TWEAKS.bg);
+    document.getElementById("snow").style.display  = TWEAKS.snow  ? "" : "none";
+    document.querySelector(".flags").style.display = TWEAKS.flags ? "" : "none";
+    // "Live video" off → poster fallback; on → restore + play whatever's active
+    const sky = document.getElementById("sky");
+    if (TWEAKS.video){
+      sky.classList.remove("video-off");
+      document.querySelectorAll(".bg-video").forEach(v => { if (v.classList.contains("is-active")) try { v.play(); } catch(_){} });
+    } else {
+      sky.classList.add("video-off");
+      document.querySelectorAll(".bg-video").forEach(v => { try { v.pause(); } catch(_){} });
+    }
+    // Manual arena override (empty = follow the ladder).
+    if (TWEAKS.arena) crossfadeTo(TWEAKS.arena);
+    // reflect active states
+    document.querySelectorAll("[data-bg]").forEach(b => b.classList.toggle("active", b.dataset.bg === TWEAKS.bg));
+    document.querySelectorAll("[data-arena]").forEach(b => b.classList.toggle("active", b.dataset.arena === (TWEAKS.arena || "")));
+    document.getElementById("snowSwitch").classList.toggle("on", !!TWEAKS.snow);
+    document.getElementById("flagsSwitch").classList.toggle("on", !!TWEAKS.flags);
+    document.getElementById("videoSwitch").classList.toggle("on", !!TWEAKS.video);
+  }
+  function setTweak(k, v){
+    TWEAKS[k] = v;
+    applyTweaks();
+    try { window.parent.postMessage({type:"__edit_mode_set_keys", edits:{[k]: v}}, "*"); } catch(_) {}
+  }
+  applyTweaks();
+
+  // bind controls
+  document.getElementById("bgOpts").addEventListener("click", e => {
+    const b = e.target.closest("[data-bg]"); if (!b) return;
+    setTweak("bg", b.dataset.bg);
   });
-}
+  document.getElementById("arenaOpts").addEventListener("click", e => {
+    const b = e.target.closest("[data-arena]"); if (!b) return;
+    setTweak("arena", b.dataset.arena);
+  });
+  document.getElementById("snowSwitch").addEventListener("click", () => setTweak("snow", !TWEAKS.snow));
+  document.getElementById("flagsSwitch").addEventListener("click", () => setTweak("flags", !TWEAKS.flags));
+  document.getElementById("videoSwitch").addEventListener("click", () => setTweak("video", !TWEAKS.video));
 
-function renderState(){
-  $("plHp").style.width  = pct(state.player_hp) + "%";
-  $("oppHp").style.width = pct(state.ai_hp) + "%";
-  $("plHpTxt").textContent  = Math.max(0,state.player_hp) + " HP";
-  $("oppHpTxt").textContent = Math.max(0,state.ai_hp) + " HP";
-  drops($("plPrana"), state.player_prana);
-  drops($("oppPrana"), state.ai_prana);
-}
-const pct = hp => Math.max(0, Math.min(100, hp/META.max_hp*100));
-function drops(box, n){
-  box.innerHTML = "";
-  for(let i=0;i<META.max_prana;i++){
-    const d = document.createElement("div");
-    d.className = "drop" + (i < n ? " full":"");
-    box.appendChild(d);
+  // host protocol: register listener BEFORE announcing availability
+  window.addEventListener("message", e => {
+    const t = e.data && e.data.type;
+    if (t === "__activate_edit_mode")   document.getElementById("tweaks").classList.add("open");
+    if (t === "__deactivate_edit_mode") document.getElementById("tweaks").classList.remove("open");
+  });
+  document.getElementById("tweaksClose").addEventListener("click", () => {
+    document.getElementById("tweaks").classList.remove("open");
+    try { window.parent.postMessage({type:"__edit_mode_dismissed"}, "*"); } catch(_) {}
+  });
+  try { window.parent.postMessage({type:"__edit_mode_available"}, "*"); } catch(_) {}
+</script>
+
+<script type="module">
+  /* ============================================================
+     GAME LOOP — wired to the real gradio.Server backend.
+     Calls /ai_turn for each round; the model commits BLIND (sees
+     only state.history, never state.player_move).
+     ============================================================ */
+  import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
+  let client = null;
+  (async () => {
+    try { client = await Client.connect(window.location.origin); }
+    catch (e) { console.warn("Gradio client offline:", e); }
+  })();
+
+  const META = JSON.parse(document.getElementById("game-meta").textContent);
+  const MOVES = Object.fromEntries(META.moves.map(m => [m.id, m]));
+  const $ = id => document.getElementById(id);
+
+  let state = null, ladderIndex = 0, busy = false;
+  $("backend").textContent = "opponent: " + META.backend;
+  renderPips();
+
+  const PLAYER_PALETTE = { robe:"#3f7d5a", trim:"#e8a13a", skin:"#d4a373", hair:"#1c1a17", sash:"#c0473b", aura:"#e8a13a" };
+  function paletteFor(opponent){
+    return { robe:opponent.accent, trim:"#e9e2d0", skin:"#caa074", hair:"#1c1a17", sash:"#0d1117", aura:opponent.accent };
   }
-}
 
-async function commit(playerMove){
-  if (busy || !state) return;
-  busy = true; renderMoves();
-  $("taunt").style.display = "none";
-  $("think").className = "think reading"; $("think").textContent = "reading your pattern";
-
-  state.player_move = playerMove;
-  let data;
-  try{
-    if(!client) client = await Client.connect(window.location.origin);
-    const res = await client.predict("/ai_turn", { state_json: JSON.stringify(state) });
-    data = JSON.parse(res.data[0]);
-  }catch(e){
-    $("think").className = "think"; $("think").textContent =
-      "The duel needs its backend. Run `python app.py` and open the served page.";
-    busy = false; renderMoves(); return;
+  const POSES = {
+    idle:[[7,1,3,2,"hair"],[7,3,3,2,"skin"],[8,4,1,1,"hair"],[6,5,5,4,"robe"],[6,6,5,1,"trim"],[6,8,5,1,"sash"],[5,6,1,3,"robe"],[11,6,1,3,"robe"],[5,9,1,2,"skin"],[11,9,1,2,"skin"],[6,9,2,6,"robe"],[9,9,2,6,"robe"],[5,15,3,1,"hair"],[9,15,3,1,"hair"]],
+    strike:[[7,2,3,2,"hair"],[7,4,3,2,"skin"],[6,6,5,3,"robe"],[6,7,5,1,"trim"],[6,8,5,1,"sash"],[4,6,2,1,"robe"],[11,5,3,1,"robe"],[14,4,2,3,"robe"],[15,3,1,1,"trim"],[15,5,1,3,"skin"],[5,9,2,5,"robe"],[9,9,3,5,"robe"],[4,14,3,2,"hair"],[10,14,4,2,"hair"]],
+    guard:[[7,3,3,2,"hair"],[7,5,3,2,"skin"],[5,7,7,4,"robe"],[5,8,7,1,"trim"],[5,10,7,1,"sash"],[4,5,3,3,"robe"],[9,5,3,3,"robe"],[4,7,1,1,"skin"],[11,7,1,1,"skin"],[5,11,3,4,"robe"],[8,11,3,4,"robe"],[4,15,4,1,"hair"],[8,15,4,1,"hair"]],
+    grapple:[[7,2,3,2,"hair"],[7,4,3,2,"skin"],[6,6,5,3,"robe"],[6,7,5,1,"trim"],[6,8,5,1,"sash"],[11,5,3,1,"robe"],[11,7,3,1,"robe"],[14,5,1,3,"skin"],[14,7,1,3,"skin"],[5,9,2,5,"robe"],[9,9,3,5,"robe"],[4,14,3,2,"hair"],[10,14,4,2,"hair"]],
+    focus:[[7,4,3,2,"hair"],[7,6,3,2,"skin"],[5,8,7,4,"robe"],[5,9,7,1,"trim"],[5,11,7,1,"sash"],[4,9,2,2,"robe"],[10,9,2,2,"robe"],[4,11,8,2,"robe"],[3,13,10,2,"robe"],[3,15,10,1,"hair"]],
+    art:[[7,1,3,2,"hair"],[7,3,3,2,"skin"],[6,5,5,4,"robe"],[6,6,5,1,"trim"],[6,8,5,1,"sash"],[11,2,2,1,"robe"],[13,3,1,3,"robe"],[14,2,2,2,"trim"],[4,2,2,1,"robe"],[3,3,1,3,"robe"],[2,2,2,2,"trim"],[6,9,2,6,"robe"],[9,9,2,6,"robe"],[5,15,3,1,"hair"],[9,15,3,1,"hair"]],
+    mist_step:[[7,2,3,2,"hair"],[7,4,3,2,"skin"],[7,6,3,3,"robe"],[7,7,3,1,"trim"],[11,4,2,1,"robe"],[9,9,1,5,"robe"],[10,14,2,2,"hair"]]
+  };
+  function spriteSVG(pose, palette){
+    const cells = POSES[pose] || POSES.idle;
+    const pixels = cells.map(([x,y,w,h,k]) =>
+      `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${palette[k] || palette.robe}" shape-rendering="crispEdges"/>`
+    ).join("");
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 20" width="100%" height="100%">${pixels}</svg>`;
+  }
+  function setPose(spriteEl, pose, palette){
+    spriteEl.innerHTML = spriteSVG(pose, palette);
+    spriteEl.classList.remove(...[...spriteEl.classList].filter(c => c.startsWith("pose-") || c === "hit"));
+    void spriteEl.offsetWidth;
+    spriteEl.classList.add("pose-" + pose);
+    clearTimeout(spriteEl._poseTimer);
+    spriteEl._poseTimer = setTimeout(() => { spriteEl.innerHTML = spriteSVG("idle", palette); }, 700);
   }
 
-  await reveal(playerMove, data);
+  let playerPalette = PLAYER_PALETTE;
+  let oppPalette = paletteFor(META.ladder[0]);
 
-  state.player_hp = data.player_hp; state.ai_hp = data.ai_hp;
-  state.player_prana = data.player_prana; state.ai_prana = data.ai_prana;
-  state.history = data.history; state.round += 1;
-  delete state.player_move;
-  renderState();
+  // --------------------------------------------------------------------
+  // Run tracking. A "run" is one attempt at the whole ladder (Tashi →
+  // Mountain). The leaderboard ranks summit clears by total turns then
+  // total seconds. Per-level rows go to the dataset for analytics.
+  // --------------------------------------------------------------------
+  let identity = { username:"", signed_in:false, source:"guest", login_url:null, on_space:false };
+  let runStart = 0, levelStart = 0;
+  let runTurns = 0, levelTurns = 0;
+  let perLevel = [];
+  let runActive = false;
 
-  data.log.forEach(line => addLog(line));
-  if (data.status !== "continue"){ busy=false; return endRound(data); }
-
-  busy = false; renderMoves();
-}
-
-// --------------------------------------------------------------------------
-// REVEAL — both fighters strike their pose simultaneously, FX fires, hits land
-// --------------------------------------------------------------------------
-async function reveal(playerMove, data){
-  const pl = playerMove.toLowerCase();
-  const op = String(data.ai_move).toLowerCase();
-
-  // VS banner across the top of the stage
-  showBanner(MOVES[playerMove].label, MOVES[data.ai_move].label);
-
-  // both poses ignite at once
-  setPose($("plSprite"), pl, playerPalette);
-  setPose($("oppSprite"), op, oppPalette);
-
-  // move-specific FX, fired in stage coordinates
-  fireFX(pl, "left");
-  fireFX(op, "right");
-
-  // reveal the mind-scroll after a beat — it's the read, not narration
-  await wait(380);
-  $("think").className = "think";
-  $("think").textContent = data.reasoning;
-  if (data.taunt && data.taunt !== "..."){ $("taunt").textContent = data.taunt; $("taunt").style.display=""; }
-
-  // hits land after the wind-up — opponent flashes if they took damage
-  await wait(120);
-  if (data.player_dmg){
-    $("plSprite").classList.add("hit");
-    impactAt("left");
-    floatDmg($("plFloats"), data.player_dmg, $("plPanel"));
-    setTimeout(()=>$("plSprite").classList.remove("hit"), 460);
+  function resetRun(){
+    runStart = Date.now(); runTurns = 0; perLevel = []; runActive = true;
   }
-  if (data.ai_dmg){
-    $("oppSprite").classList.add("hit");
-    impactAt("right");
-    floatDmg($("oppFloats"), data.ai_dmg, $("oppPanel"));
-    setTimeout(()=>$("oppSprite").classList.remove("hit"), 460);
+  function resetLevel(){
+    levelStart = Date.now(); levelTurns = 0;
   }
-  await wait(600);
-}
-
-function fireFX(move, side){
-  const fx = $("fx");
-  if (move === "art"){
-    const p = document.createElement("div");
-    p.className = "projectile" + (side === "right" ? " rev" : "");
-    fx.appendChild(p);
-    setTimeout(()=>p.remove(), 600);
-  } else if (move === "mist_step"){
-    const m = document.createElement("div");
-    m.className = "mistpuff";
-    m.style.left = side === "left" ? "16%" : "84%";
-    m.style.bottom = "70px";
-    fx.appendChild(m);
-    setTimeout(()=>m.remove(), 950);
-  } else if (move === "guard"){
-    const a = document.createElement("div");
-    a.className = "aura";
-    a.style.left = side === "left" ? "16%" : "84%";
-    a.style.bottom = "70px";
-    fx.appendChild(a);
-    setTimeout(()=>a.remove(), 600);
-  } else if (move === "focus"){
-    const b = document.createElement("div");
-    b.className = "breath";
-    b.style.left = side === "left" ? "16%" : "84%";
-    b.style.bottom = "100px";
-    fx.appendChild(b);
-    setTimeout(()=>b.remove(), 1150);
+  function pushLevel(opp, won){
+    perLevel.push({
+      opponent_id: opp.id,
+      turns: levelTurns,
+      seconds: +((Date.now() - levelStart) / 1000).toFixed(2),
+      won: !!won,
+    });
   }
-}
 
-function impactAt(victimSide){
-  const i = document.createElement("div");
-  i.className = "impact";
-  i.style.left = victimSide === "left" ? "20%" : "80%";
-  i.style.bottom = "100px";
-  $("fx").appendChild(i);
-  setTimeout(()=>i.remove(), 470);
-}
-
-function showBanner(playerLabel, aiLabel){
-  const old = document.querySelector(".move-banner"); if (old) old.remove();
-  const b = document.createElement("div");
-  b.className = "move-banner";
-  b.innerHTML = `<span class="pl">${playerLabel}</span><span class="vs">vs</span><span>${aiLabel}</span>`;
-  $("stage").appendChild(b);
-  setTimeout(()=>b.remove(), 1000);
-}
-
-function floatDmg(box, dmg, panel){
-  const f = document.createElement("div");
-  f.className = "float"; f.textContent = "-" + dmg;
-  f.style.color = "var(--crimson)";
-  f.style.left = (20 + Math.random()*55) + "%"; f.style.top = "12px";
-  box.appendChild(f); panel.classList.add("shake");
-  setTimeout(()=>{ f.remove(); panel.classList.remove("shake"); }, 1000);
-}
-
-function addLog(line){
-  const d = document.createElement("div");
-  d.innerHTML = `<b>R${state.round}.</b> ${line}`;
-  $("log").prepend(d);
-}
-
-function endRound(data){
-  const opp = META.ladder[ladderIndex];
-  const o = $("overlay"), b2 = $("cardBtn2");
-  b2.style.display = "none";
-  if (data.status === "advance"){
-    ladderIndex++; renderPips();
-    const nxt = META.ladder[ladderIndex];
-    $("cardEm").textContent = nxt.glyph;
-    $("cardTitle").textContent = `${opp.name} falls`;
-    $("cardSub").textContent = `next: ${nxt.name}, ${nxt.title}`;
-    $("cardBio").textContent = nxt.bio;
-    $("cardBtn").textContent = "Face " + nxt.name;
-    $("cardBtn").onclick = () => { o.classList.add("hide"); newFight(); };
-  } else if (data.status === "ladder_clear"){
-    $("cardEm").textContent = "✦";
-    $("cardTitle").textContent = "The summit is yours";
-    $("cardSub").textContent = "you out-read every champion of the mist";
-    $("cardBio").textContent = "You climbed the whole mountain by predicting minds that were predicting yours. Show a friend — then see if they can.";
-    $("cardBtn").textContent = "Climb again";
-    $("cardBtn").onclick = () => { ladderIndex=0; o.classList.add("hide"); newFight(); };
-  } else {
-    $("cardEm").textContent = data.status==="double_ko" ? "⚔" : "🩸";
-    $("cardTitle").textContent = data.status==="double_ko" ? "Both fall" : `${opp.name} reads you true`;
-    $("cardSub").textContent = "the mist keeps its champion";
-    $("cardBio").textContent = "Every loss is a tell you gave away. Watch how it punished your pattern — then take the path again.";
-    $("cardBtn").textContent = "Take the path again";
-    $("cardBtn").onclick = () => { o.classList.add("hide"); newFight(); };
+  function renderPips(){
+    const p = $("pips"); p.innerHTML = "";
+    META.ladder.forEach((o,i) => {
+      const d = document.createElement("div"); d.className = "pip" + (i < ladderIndex ? " on" : ""); p.appendChild(d);
+    });
   }
-  o.classList.remove("hide");
-}
 
-const wait = ms => new Promise(r => setTimeout(r, ms));
+  function newFight(){
+    // A fresh climb (back at the foot of the mountain) starts the run timer.
+    // Continuing up the ladder just resets the per-level counter.
+    if (ladderIndex === 0 || !runActive) resetRun();
+    resetLevel();
 
-$("cardBtn").onclick = () => { $("overlay").classList.add("hide"); newFight(); };
+    const opp = META.ladder[ladderIndex];
+    if (!TWEAKS.arena) crossfadeTo(opp.id);
+    document.documentElement.style.setProperty("--accent", opp.accent);
+    oppPalette = paletteFor(opp);
+    state = { opponent_id:opp.id, round:1, player_hp:META.max_hp, ai_hp:META.max_hp,
+      player_prana:META.start_prana, ai_prana:META.start_prana, history:[] };
+    $("oppName").textContent = opp.name; $("oppTitle").textContent = opp.title;
+    $("think").className = "think reading"; $("think").textContent = "sizing you up";
+    $("taunt").style.display = "none"; $("log").innerHTML = "";
+    $("scrollLabel").textContent = "the mind of " + opp.name;
+    $("plSprite").innerHTML = spriteSVG("idle", playerPalette);
+    $("oppSprite").innerHTML = spriteSVG("idle", oppPalette);
+    $("fx").innerHTML = ""; renderMoves(); renderState(); renderPips();
+  }
+
+  function renderMoves(){
+    const box = $("moves"); box.innerHTML = "";
+    META.moves.forEach(m => {
+      const b = document.createElement("button");
+      b.className = "mv"; b.dataset.move = m.id;
+      b.disabled = state.player_prana < m.cost || busy;
+      b.title = m.blurb;
+      b.innerHTML = `<span class="g">${m.glyph}</span><span class="l">${m.label}</span><span class="c ${m.cost? "":"free"}">${m.cost? m.cost+" prana" : "free"}</span>`;
+      b.onclick = () => commit(m.id);
+      box.appendChild(b);
+    });
+  }
+  function renderState(){
+    $("plHp").style.width  = pct(state.player_hp) + "%";
+    $("oppHp").style.width = pct(state.ai_hp) + "%";
+    $("plHpTxt").textContent  = Math.max(0,state.player_hp) + " HP";
+    $("oppHpTxt").textContent = Math.max(0,state.ai_hp) + " HP";
+    drops($("plPrana"), state.player_prana); drops($("oppPrana"), state.ai_prana);
+  }
+  const pct = hp => Math.max(0, Math.min(100, hp/META.max_hp*100));
+  function drops(box, n){
+    box.innerHTML = "";
+    for(let i=0;i<META.max_prana;i++){
+      const d = document.createElement("div"); d.className = "drop" + (i < n ? " full":""); box.appendChild(d);
+    }
+  }
+
+  async function commit(playerMove){
+    if (busy || !state) return;
+    busy = true; renderMoves();
+    levelTurns++; runTurns++;
+    $("taunt").style.display = "none";
+    $("think").className = "think reading"; $("think").textContent = "reading your pattern";
+    state.player_move = playerMove;
+    let data;
+    try {
+      if (!client) client = await Client.connect(window.location.origin);
+      const res = await client.predict("/ai_turn", { state_json: JSON.stringify(state) });
+      data = JSON.parse(res.data[0]);
+    } catch (e) {
+      $("think").className = "think";
+      $("think").textContent = "The duel needs its backend. Run `python app.py` and open the served page.";
+      busy = false; renderMoves(); return;
+    }
+    await reveal(playerMove, data);
+    state.player_hp = data.player_hp; state.ai_hp = data.ai_hp;
+    state.player_prana = data.player_prana; state.ai_prana = data.ai_prana;
+    state.history = data.history; state.round += 1;
+    delete state.player_move; renderState();
+    data.log.forEach(line => addLog(line));
+    if (data.status !== "continue"){ busy=false; return endRound(data); }
+    busy = false; renderMoves();
+  }
+
+  async function reveal(playerMove, data){
+    const pl = playerMove.toLowerCase(); const op = String(data.ai_move).toLowerCase();
+    showBanner(MOVES[playerMove].label, MOVES[data.ai_move].label);
+    setPose($("plSprite"), pl, playerPalette);
+    setPose($("oppSprite"), op, oppPalette);
+    fireFX(pl, "left"); fireFX(op, "right");
+    await wait(380);
+    $("think").className = "think"; $("think").textContent = data.reasoning;
+    if (data.taunt && data.taunt !== "..."){ $("taunt").textContent = data.taunt; $("taunt").style.display=""; }
+    await wait(120);
+    if (data.player_dmg){ $("plSprite").classList.add("hit"); impactAt("left"); floatDmg($("plFloats"), data.player_dmg, $("plPanel")); setTimeout(()=>$("plSprite").classList.remove("hit"), 460); }
+    if (data.ai_dmg){ $("oppSprite").classList.add("hit"); impactAt("right"); floatDmg($("oppFloats"), data.ai_dmg, $("oppPanel")); setTimeout(()=>$("oppSprite").classList.remove("hit"), 460); }
+    await wait(600);
+  }
+
+  function fireFX(move, side){
+    const fx = $("fx");
+    if (move === "art"){
+      const p = document.createElement("div"); p.className = "projectile" + (side === "right" ? " rev" : "");
+      fx.appendChild(p); setTimeout(()=>p.remove(), 600);
+    } else if (move === "mist_step"){
+      const m = document.createElement("div"); m.className = "mistpuff";
+      m.style.left = side === "left" ? "16%" : "84%"; m.style.bottom = "70px";
+      fx.appendChild(m); setTimeout(()=>m.remove(), 950);
+    } else if (move === "guard"){
+      const a = document.createElement("div"); a.className = "aura";
+      a.style.left = side === "left" ? "16%" : "84%"; a.style.bottom = "70px";
+      fx.appendChild(a); setTimeout(()=>a.remove(), 600);
+    } else if (move === "focus"){
+      const b = document.createElement("div"); b.className = "breath";
+      b.style.left = side === "left" ? "16%" : "84%"; b.style.bottom = "100px";
+      fx.appendChild(b); setTimeout(()=>b.remove(), 1150);
+    }
+  }
+  function impactAt(victimSide){
+    const i = document.createElement("div"); i.className = "impact";
+    i.style.left = victimSide === "left" ? "20%" : "80%"; i.style.bottom = "100px";
+    $("fx").appendChild(i); setTimeout(()=>i.remove(), 470);
+  }
+  function showBanner(playerLabel, aiLabel){
+    const old = document.querySelector(".move-banner"); if (old) old.remove();
+    const b = document.createElement("div"); b.className = "move-banner";
+    b.innerHTML = `<span class="pl">${playerLabel}</span><span class="vs">vs</span><span>${aiLabel}</span>`;
+    $("stage").appendChild(b); setTimeout(()=>b.remove(), 1000);
+  }
+  function floatDmg(box, dmg, panel){
+    const f = document.createElement("div"); f.className = "float"; f.textContent = "-" + dmg;
+    f.style.color = "var(--crimson)";
+    f.style.left = (20 + Math.random()*55) + "%"; f.style.top = "12px";
+    box.appendChild(f); panel.classList.add("shake");
+    setTimeout(()=>{ f.remove(); panel.classList.remove("shake"); }, 1000);
+  }
+  function addLog(line){
+    const d = document.createElement("div"); d.innerHTML = `<b>R${state.round}.</b> ${line}`; $("log").prepend(d);
+  }
+  function endRound(data){
+    const opp = META.ladder[ladderIndex];
+    const o = $("overlay"), b2 = $("cardBtn2"); b2.style.display = "none";
+
+    // Between-fight cards never re-ask for identity.
+    $("identBlock").style.display = "none";
+
+    if (data.status === "advance"){
+      pushLevel(opp, true);
+      ladderIndex++; renderPips();
+      const nxt = META.ladder[ladderIndex];
+      $("cardEm").textContent = nxt.glyph; $("cardTitle").textContent = `${opp.name} falls`;
+      $("cardSub").textContent = `next: ${nxt.name}, ${nxt.title}`; $("cardBio").textContent = nxt.bio;
+      $("cardBtn").textContent = "Face " + nxt.name;
+      $("cardBtn").onclick = () => { o.classList.add("hide"); newFight(); };
+    } else if (data.status === "ladder_clear"){
+      pushLevel(opp, true);
+      ladderIndex = META.ladder.length; renderPips();
+      $("cardEm").textContent = "✦"; $("cardTitle").textContent = "The summit is yours";
+      $("cardSub").textContent = "you out-read every champion of the mist";
+      $("cardBio").textContent = "You climbed the whole mountain by predicting minds that were predicting yours.";
+      $("cardBtn").textContent = "Climb again";
+      $("cardBtn").onclick = () => { ladderIndex=0; o.classList.add("hide"); newFight(); };
+      submitRun(true);
+    } else {
+      // defeat / double_ko — terminal, ends the run. Reset so the next
+      // attempt starts the timer fresh at Tashi.
+      pushLevel(opp, false);
+      $("cardEm").textContent = data.status==="double_ko" ? "⚔" : "🩸";
+      $("cardTitle").textContent = data.status==="double_ko" ? "Both fall" : `${opp.name} reads you true`;
+      $("cardSub").textContent = "the mist keeps its champion";
+      $("cardBio").textContent = "Every loss is a tell you gave away. Take the path again.";
+      $("cardBtn").textContent = "Take the path again";
+      $("cardBtn").onclick = () => { ladderIndex=0; o.classList.add("hide"); newFight(); };
+      submitRun(false);
+    }
+    o.classList.remove("hide");
+  }
+
+  // --------------------------------------------------------------------
+  // Identity + leaderboard plumbing.
+  // --------------------------------------------------------------------
+  async function loadIdentity(){
+    try {
+      const r = await fetch("/whoami", { credentials:"same-origin" });
+      identity = await r.json();
+    } catch (_) { identity = { username:"", signed_in:false, source:"guest", on_space:false }; }
+
+    const remembered = (localStorage.getItem("mist:name") || "").trim();
+    if (identity.signed_in && identity.username){
+      $("identName").value = identity.username;
+      $("identName").disabled = true;
+      $("identStatus").textContent = "signed in as " + identity.username;
+      $("identCta").style.display = "none";
+    } else {
+      $("identName").value = remembered;
+      $("identName").disabled = false;
+      if (identity.on_space && identity.login_url){
+        $("identCta").style.display = "";
+        $("identSignIn").href = identity.login_url;
+      } else {
+        $("identCta").style.display = "none";
+      }
+      $("identStatus").textContent = "";
+    }
+  }
+
+  function currentName(){
+    if (identity.signed_in) return identity.username;
+    const v = ($("identName").value || "").trim();
+    return v || "Anonymous Climber";
+  }
+
+  async function submitRun(won){
+    runActive = false;
+    const payload = {
+      username: currentName(),
+      total_turns: runTurns,
+      total_seconds: +((Date.now() - runStart) / 1000).toFixed(2),
+      per_level: perLevel,
+      won: !!won,
+    };
+    if (!identity.signed_in) {
+      try { localStorage.setItem("mist:name", payload.username); } catch (_) {}
+    }
+    try {
+      await fetch("/submit_run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      });
+    } catch (_) { /* offline — fail quietly, don't block the celebration */ }
+  }
+
+  async function openLeaderboard(){
+    $("lbOv").classList.remove("hide");
+    $("lbStatus").textContent = "reading the climbers' marks…";
+    $("lbTable").innerHTML = "";
+    let data;
+    try { data = await (await fetch("/top_runs")).json(); }
+    catch (e) { data = { ok:false, reason:"offline" }; }
+    renderLeaderboard(data);
+  }
+
+  function renderLeaderboard(data){
+    if (!data || !data.ok){
+      $("lbStatus").textContent = data && data.reason
+        ? "Leaderboard offline · " + data.reason
+        : "Leaderboard offline.";
+      $("lbTable").innerHTML = `<div class="lb-empty">Set LEADERBOARD_REPO and HF_TOKEN on the Space to start ranking climbers.</div>`;
+      return;
+    }
+    const rows = data.rows || [];
+    $("lbStatus").textContent = `${rows.length} climber${rows.length===1?"":"s"} have cleared the summit`;
+    if (!rows.length){
+      $("lbTable").innerHTML = `<div class="lb-empty">No one has reached the summit yet. Be the first.</div>`;
+      return;
+    }
+    const me = currentName().toLowerCase();
+    const html = [`<div class="lb-row head"><span class="rk">#</span><span class="nm">Climber</span><span class="tn">Turns</span><span class="tm">Time</span></div>`];
+    rows.forEach((r, i) => {
+      const isMe = (r.username || "").toLowerCase() === me;
+      const verified = r.source === "hf-oauth" ? '<span class="verified">✓ hf</span>' : '';
+      const secs = Number(r.total_seconds || 0);
+      const t = secs >= 60 ? `${Math.floor(secs/60)}m ${Math.round(secs%60)}s` : `${secs.toFixed(1)}s`;
+      html.push(
+        `<div class="lb-row${isMe?" you":""}">`+
+          `<span class="rk">${i+1}</span>`+
+          `<span class="nm">${escapeHtml(r.username||"anon")}${verified}</span>`+
+          `<span class="tn">${r.total_turns||0}</span>`+
+          `<span class="tm">${t}</span>`+
+        `</div>`
+      );
+    });
+    $("lbTable").innerHTML = html.join("");
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  $("openLb").onclick = openLeaderboard;
+  $("lbClose").onclick = () => $("lbOv").classList.add("hide");
+  $("lbOv").addEventListener("click", e => { if (e.target === $("lbOv")) $("lbOv").classList.add("hide"); });
+  loadIdentity();
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  $("cardBtn").onclick = () => { $("overlay").classList.add("hide"); newFight(); };
 </script>
 </body>
 </html>

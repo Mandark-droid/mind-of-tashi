@@ -16,17 +16,30 @@ from __future__ import annotations
 import json
 import os
 
-from fastapi.responses import HTMLResponse
+from fastapi import Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from gradio import Server
 
 import engine
+import leaderboard
 import opponents
 from llm import Reasoner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = os.path.join(HERE, "static", "index.html")
+ASSETS = os.path.join(HERE, "static", "assets")
+
+# HF Spaces sets SPACE_ID automatically. We use it as the single switch for
+# "are we on a real Space?" — only then do we trust the OAuth session. Locally,
+# /whoami always reports signed_in=False and the UI falls back to a typed name.
+ON_SPACE = bool(os.environ.get("SPACE_ID"))
 
 app = Server()
+# Serve the arena backdrops (mp4 / webp / png) referenced by the frontend.
+# Without this mount, /assets/village.mp4 etc. 404 and the page falls back
+# to the poster image only (or a black sky if posters are missing too).
+app.mount("/assets", StaticFiles(directory=ASSETS), name="assets")
 reasoner = Reasoner()  # loaded once; reused across turns
 print(f"[app] opponent backend: {reasoner.backend}")
 
@@ -126,6 +139,71 @@ async def index() -> str:
     with open(INDEX, "r", encoding="utf-8") as fh:
         html = fh.read()
     return html.replace("__GAME_META__", json.dumps(_meta()))
+
+
+# --- leaderboard wiring ---------------------------------------------------
+# Identity policy: on a Space with `hf_oauth: true` we read the verified
+# username from the request session and IGNORE whatever the client sends, so
+# nobody can submit a run as someone else. Locally, /whoami signals "guest" and
+# the UI collects a typed name — no verification, no spoofing prevention.
+def _oauth_username(request: Request) -> str | None:
+    if not ON_SPACE:
+        return None
+    try:
+        info = (request.session.get("oauth_info") or {}).get("userinfo") or {}
+        return info.get("preferred_username") or info.get("name")
+    except Exception:
+        return None
+
+
+@app.get("/whoami")
+async def whoami(request: Request):
+    username = _oauth_username(request)
+    if username:
+        return {"signed_in": True, "username": username, "source": "hf-oauth", "on_space": True}
+    return {
+        "signed_in": False,
+        "username": None,
+        "source": "guest",
+        "on_space": ON_SPACE,
+        # HF Spaces with hf_oauth: true auto-mounts this login route.
+        "login_url": "/login/huggingface" if ON_SPACE else None,
+    }
+
+
+@app.post("/submit_run")
+async def submit_run(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "reason": "bad json"}, status_code=400)
+
+    verified = _oauth_username(request)
+    if verified:
+        username, source = verified, "hf-oauth"
+    else:
+        username, source = str(body.get("username") or "anon")[:40], "guest"
+
+    res = leaderboard.submit_run(
+        username=username,
+        source=source,
+        total_turns=int(body.get("total_turns", 0)),
+        total_seconds=float(body.get("total_seconds", 0)),
+        per_level=body.get("per_level") or [],
+        won=bool(body.get("won", False)),
+        backend=reasoner.backend,
+    )
+    return res
+
+
+@app.get("/top_runs")
+async def top_runs():
+    return leaderboard.top_runs(limit=20)
+
+
+@app.get("/leaderboard_status")
+async def leaderboard_status():
+    return {**leaderboard.status(), "on_space": ON_SPACE}
 
 
 if __name__ == "__main__":

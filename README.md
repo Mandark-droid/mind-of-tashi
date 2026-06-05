@@ -8,6 +8,10 @@ sdk_version: 6.13.0
 app_file: app.py
 pinned: false
 license: mit
+hf_oauth: true
+hf_oauth_scopes:
+  - openid
+  - profile
 ---
 
 # The Mind of Tashi — a duel of foresight
