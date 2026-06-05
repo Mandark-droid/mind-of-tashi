@@ -1,0 +1,17 @@
+# --- The Mind of Tashi: dependencies ---------------------------------------------
+# Gradio 6 brings gradio.Server (custom frontend + Gradio backend). FastAPI is
+# pinned explicitly because app.py imports `fastapi.responses.HTMLResponse`
+# directly — relying on it as a transitive dep of gradio is fragile across
+# gradio releases. Installing both here keeps `pip install -r requirements.txt`
+# self-sufficient for local dev; on Spaces, the sdk_version in README.md also
+# pins the gradio runtime.
+gradio>=6.10
+fastapi>=0.115
+
+# Opponent runtime: a small reasoning model via llama.cpp.
+# This is the path that earns the Off-the-Grid (no cloud API) and Llama Champion
+# badges. First Space boot compiles a CPU backend, which can take a few minutes.
+# If llama_cpp is absent or no model is fetched, the app auto-falls back to the
+# built-in mock opponent, so it always runs.
+llama-cpp-python>=0.3.0
+huggingface_hub>=0.27.0

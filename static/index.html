@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Mind of Tashi — a duel of foresight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Eczar:wght@500;600;700&family=Mukta:wght@300;400;500;600&family=VT323&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#0d1117; --ink-2:#141b25; --panel:#19222e; --panel-2:#1f2a38;
+    --mist:#2a3a4d; --line:#33455a;
+    --bone:#e9e2d0; --bone-dim:#9aa6b0;
+    --ember:#e8a13a; --ember-2:#f3c270; --crimson:#c0473b;
+    --accent:#cfe8f0;
+    --flag-1:#2f6fb0; --flag-2:#e8a13a; --flag-3:#c0473b; --flag-4:#3f9d6c; --flag-5:#e9e2d0;
+    --shadow:0 18px 50px rgba(0,0,0,.55);
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:"Mukta",system-ui,sans-serif; color:var(--bone);
+    background:radial-gradient(1200px 700px at 50% -10%, #20303f 0%, var(--ink) 60%, #070a0e 100%);
+    overflow-x:hidden; min-height:100%;
+    -webkit-font-smoothing:antialiased;
+  }
+  .sky{position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden}
+  .mist{position:absolute; left:-20%; right:-20%; height:60vh; opacity:.5;
+    background:radial-gradient(60% 100% at 50% 100%, rgba(120,150,180,.18), transparent 70%);
+    filter:blur(8px); animation:drift 26s ease-in-out infinite alternate;}
+  .mist.m2{top:18vh; opacity:.35; animation-duration:34s; animation-direction:alternate-reverse}
+  .mist.m3{top:42vh; opacity:.25; animation-duration:42s}
+  @keyframes drift{from{transform:translateX(-4%)}to{transform:translateX(4%)}}
+  .ridge{position:absolute; bottom:0; left:0; right:0; height:42vh; opacity:.6;
+    background:
+      linear-gradient(to top, #060a0e 0%, transparent 100%),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1440' height='320' viewBox='0 0 1440 320'><path fill='%230b1118' d='M0,320 L0,180 L160,120 L300,200 L440,90 L620,210 L780,70 L960,190 L1140,100 L1300,200 L1440,140 L1440,320 Z'/></svg>") bottom/cover no-repeat;}
+  .grain{position:fixed; inset:0; z-index:1; pointer-events:none; opacity:.05; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");}
+
+  .wrap{position:relative; z-index:2; max-width:960px; margin:0 auto; padding:22px 18px 40px}
+
+  /* header */
+  header{display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:18px}
+  .brand{display:flex; flex-direction:column; line-height:1}
+  .brand .deva{font-family:"Eczar"; font-weight:600; color:var(--ember); font-size:13px; letter-spacing:.18em; opacity:.85}
+  .brand h1{font-family:"Eczar"; font-weight:700; font-size:26px; margin:.18em 0 0;
+    letter-spacing:.02em; background:linear-gradient(180deg,#fff,#cdbf9f); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .brand .tag{font-size:12.5px; color:var(--bone-dim); letter-spacing:.04em; margin-top:.3em}
+  .pips{display:flex; gap:7px; align-items:center}
+  .pip{width:11px; height:18px; border-radius:2px; background:var(--line); position:relative; opacity:.4; transition:.4s}
+  .pip.on{opacity:1; box-shadow:0 0 10px currentColor}
+  .pip:nth-child(1){color:var(--flag-1)} .pip:nth-child(2){color:var(--flag-2)}
+  .pip:nth-child(3){color:var(--flag-3)} .pip:nth-child(4){color:var(--flag-4)} .pip:nth-child(5){color:var(--flag-5)}
+  .pip.on{background:currentColor}
+  .backend{font-size:10.5px; color:var(--bone-dim); letter-spacing:.08em; text-transform:uppercase; margin-top:6px; text-align:right; opacity:.7}
+
+  /* the battle stage — a single shared scene with both fighters */
+  .stage{
+    position:relative; height:240px; margin:0 0 12px;
+    border:1px solid var(--line); border-radius:var(--r);
+    background:
+      linear-gradient(180deg, rgba(40,55,72,.55), rgba(10,15,20,.85)),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 240'><path fill='%23101820' opacity='.7' d='M0,200 L80,150 L160,180 L240,130 L320,170 L400,120 L480,160 L560,140 L600,170 L600,240 L0,240 Z'/><path fill='%230a1218' d='M0,220 L60,200 L140,215 L220,195 L300,210 L380,190 L460,210 L540,200 L600,215 L600,240 L0,240 Z'/></svg>") bottom/cover no-repeat;
+    overflow:hidden; box-shadow:var(--shadow);
+  }
+  .stage .ground{
+    position:absolute; left:0; right:0; bottom:0; height:30px;
+    background:linear-gradient(180deg, transparent, rgba(0,0,0,.6));
+    border-top:1px dashed rgba(207,232,240,.08);
+  }
+  .stage .lantern{
+    position:absolute; top:14px; width:8px; height:14px; border-radius:50%/40%;
+    background:radial-gradient(circle at 50% 35%, var(--ember-2), var(--ember) 60%, #5a3208);
+    box-shadow:0 0 18px var(--ember), 0 0 6px var(--ember-2);
+    animation:sway 5s ease-in-out infinite alternate;
+  }
+  .stage .lantern.l1{left:14%} .stage .lantern.l2{left:50%; top:8px}
+  .stage .lantern.l3{right:14%; animation-delay:-2s}
+  @keyframes sway{from{transform:translateX(-3px)}to{transform:translateX(3px)}}
+
+  /* fighter slot inside the stage */
+  .slot{
+    position:absolute; bottom:18px; width:120px; height:180px;
+    display:flex; align-items:flex-end; justify-content:center;
+  }
+  .slot.left{left:8%} .slot.right{right:8%}
+  .slot .shadow{
+    position:absolute; bottom:6px; left:50%; transform:translateX(-50%);
+    width:78px; height:10px; border-radius:50%;
+    background:radial-gradient(ellipse, rgba(0,0,0,.55), transparent 70%);
+    filter:blur(2px);
+  }
+
+  .sprite{
+    width:96px; height:120px;
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    transition:transform .35s cubic-bezier(.2,.8,.2,1), filter .3s, opacity .3s;
+    position:relative; z-index:2;
+    filter:drop-shadow(0 4px 6px rgba(0,0,0,.6));
+  }
+  .slot.right .sprite{transform:scaleX(-1)}
+
+  /* per-move pose animations. each is symmetric; the .right scaleX(-1)
+     mirrors them so both fighters lunge "forward" toward center. */
+  .slot.left  .sprite.pose-strike    { animation:lungeR .55s ease-out }
+  .slot.right .sprite.pose-strike    { animation:lungeL .55s ease-out }
+  .slot.left  .sprite.pose-grapple   { animation:lungeR .7s ease-in-out }
+  .slot.right .sprite.pose-grapple   { animation:lungeL .7s ease-in-out }
+  .slot.left  .sprite.pose-guard     { animation:brace .5s ease-out }
+  .slot.right .sprite.pose-guard     { animation:brace .5s ease-out; transform:scaleX(-1) }
+  .slot.left  .sprite.pose-focus     { animation:breathe 1.2s ease-in-out }
+  .slot.right .sprite.pose-focus     { animation:breathe 1.2s ease-in-out; transform:scaleX(-1) }
+  .slot.left  .sprite.pose-art       { animation:cast .7s ease-out }
+  .slot.right .sprite.pose-art       { animation:cast .7s ease-out; transform:scaleX(-1) }
+  .slot.left  .sprite.pose-mist_step { animation:vanish .9s ease-in-out }
+  .slot.right .sprite.pose-mist_step { animation:vanish .9s ease-in-out; transform:scaleX(-1) }
+  .slot.left  .sprite.hit            { animation:hitL .45s ease-out }
+  .slot.right .sprite.hit            { animation:hitR .45s ease-out }
+
+  @keyframes lungeR{
+    0%{transform:translateX(0) scaleX(1)}
+    25%{transform:translateX(-10px) scaleX(1)}
+    55%{transform:translateX(40px) scaleX(1) skewX(-6deg)}
+    100%{transform:translateX(0) scaleX(1)}
+  }
+  @keyframes lungeL{
+    0%{transform:scaleX(-1) translateX(0)}
+    25%{transform:scaleX(-1) translateX(-10px)}
+    55%{transform:scaleX(-1) translateX(40px) skewX(-6deg)}
+    100%{transform:scaleX(-1) translateX(0)}
+  }
+  @keyframes brace{
+    0%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}
+    50%{filter:drop-shadow(0 0 12px var(--accent)) drop-shadow(0 0 24px var(--accent))}
+    100%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}
+  }
+  @keyframes breathe{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(-6px); filter:drop-shadow(0 -6px 14px var(--ember))}
+  }
+  @keyframes cast{
+    0%{transform:translateY(0)}
+    35%{transform:translateY(-4px); filter:drop-shadow(0 0 18px var(--ember-2))}
+    100%{transform:translateY(0)}
+  }
+  @keyframes vanish{
+    0%{opacity:1; filter:blur(0)}
+    40%{opacity:.15; filter:blur(6px)}
+    70%{opacity:.15; filter:blur(6px); transform:translateX(20px)}
+    100%{opacity:1; filter:blur(0)}
+  }
+  @keyframes hitL{
+    0%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}
+    20%{transform:translateX(-12px); filter:drop-shadow(0 0 14px var(--crimson)) brightness(2)}
+    50%{transform:translateX(4px)}
+    100%{transform:translateX(0)}
+  }
+  @keyframes hitR{
+    0%{transform:scaleX(-1); filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}
+    20%{transform:scaleX(-1) translateX(-12px); filter:drop-shadow(0 0 14px var(--crimson)) brightness(2)}
+    50%{transform:scaleX(-1) translateX(4px)}
+    100%{transform:scaleX(-1) translateX(0)}
+  }
+
+  /* in-stage effect layers: projectiles, mist, aura, impact spark */
+  .fx{position:absolute; inset:0; pointer-events:none; z-index:3}
+  .projectile{
+    position:absolute; width:18px; height:18px; border-radius:50%;
+    background:radial-gradient(circle, #fff, var(--ember-2) 40%, var(--ember) 75%, transparent 100%);
+    box-shadow:0 0 22px var(--ember), 0 0 42px var(--ember-2);
+    animation:projFly .55s linear forwards;
+  }
+  .projectile.rev{animation:projFlyRev .55s linear forwards}
+  @keyframes projFly{
+    from{left:18%; bottom:90px; transform:scale(.4)}
+    to  {left:82%; bottom:110px; transform:scale(1.4)}
+  }
+  @keyframes projFlyRev{
+    from{right:18%; bottom:90px; transform:scale(.4)}
+    to  {right:82%; bottom:110px; transform:scale(1.4)}
+  }
+  .impact{
+    position:absolute; width:60px; height:60px; border-radius:50%;
+    background:radial-gradient(circle, #fff 0%, var(--crimson) 30%, transparent 70%);
+    transform:translate(-50%,-50%) scale(.2); opacity:0;
+    animation:impactPop .45s ease-out forwards;
+  }
+  @keyframes impactPop{
+    0%{opacity:0; transform:translate(-50%,-50%) scale(.2)}
+    30%{opacity:1; transform:translate(-50%,-50%) scale(1)}
+    100%{opacity:0; transform:translate(-50%,-50%) scale(1.6)}
+  }
+  .mistpuff{
+    position:absolute; width:120px; height:120px; border-radius:50%;
+    background:radial-gradient(circle, rgba(207,232,240,.55), transparent 65%);
+    transform:translate(-50%,-50%) scale(.4); opacity:0;
+    animation:mistGrow .9s ease-out forwards;
+    filter:blur(2px);
+  }
+  @keyframes mistGrow{
+    0%{opacity:0; transform:translate(-50%,-50%) scale(.4)}
+    25%{opacity:.9}
+    100%{opacity:0; transform:translate(-50%,-50%) scale(1.8)}
+  }
+  .aura{
+    position:absolute; width:90px; height:90px; border-radius:50%;
+    border:2px solid var(--accent); opacity:0;
+    transform:translate(-50%,-50%) scale(.5);
+    animation:auraPulse .55s ease-out forwards;
+    box-shadow:0 0 24px var(--accent), inset 0 0 22px var(--accent);
+  }
+  @keyframes auraPulse{
+    0%{opacity:0; transform:translate(-50%,-50%) scale(.5)}
+    40%{opacity:1; transform:translate(-50%,-50%) scale(1.05)}
+    100%{opacity:0; transform:translate(-50%,-50%) scale(1.4)}
+  }
+  .breath{
+    position:absolute; width:30px; height:60px;
+    background:radial-gradient(ellipse at 50% 100%, var(--ember-2), transparent 70%);
+    opacity:0; transform:translateX(-50%);
+    animation:breathRise 1.1s ease-out forwards;
+    filter:blur(1px);
+  }
+  @keyframes breathRise{
+    0%{opacity:0; transform:translateX(-50%) translateY(0) scaleY(.4)}
+    30%{opacity:.9}
+    100%{opacity:0; transform:translateX(-50%) translateY(-50px) scaleY(1.2)}
+  }
+  .move-banner{
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    font-family:"VT323",monospace; font-size:22px; letter-spacing:.14em;
+    color:var(--accent); text-shadow:0 0 10px var(--accent);
+    opacity:0; animation:bannerIn .9s ease-out forwards;
+    white-space:nowrap;
+  }
+  @keyframes bannerIn{
+    0%{opacity:0; transform:translateX(-50%) translateY(-6px)}
+    20%{opacity:1; transform:translateX(-50%) translateY(0)}
+    80%{opacity:1}
+    100%{opacity:0; transform:translateX(-50%) translateY(-4px)}
+  }
+  .move-banner .vs{color:var(--ember-2); text-shadow:0 0 8px var(--ember-2); margin:0 .5em}
+  .move-banner .pl{color:var(--ember-2); text-shadow:0 0 8px var(--ember-2)}
+
+  /* fighter info panels — slimmer now, since the visual is on the stage */
+  .info-row{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .fighter{background:linear-gradient(180deg,var(--panel),var(--panel-2)); border:1px solid var(--line);
+    border-radius:var(--r); padding:12px 14px; box-shadow:var(--shadow); position:relative; overflow:hidden}
+  .fighter.opp{border-top:2px solid var(--accent)}
+  .fighter.player{border-top:2px solid var(--ember)}
+  .who .nm{font-family:"Eczar"; font-size:17px; font-weight:600; line-height:1}
+  .who .ti{font-size:11.5px; color:var(--bone-dim); letter-spacing:.03em; margin-top:3px}
+  .bars{margin-top:10px}
+  .bar{height:11px; border-radius:6px; background:#0c1218; border:1px solid var(--line); overflow:hidden; position:relative}
+  .bar > i{display:block; height:100%; border-radius:6px; transition:width .6s cubic-bezier(.2,.8,.2,1)}
+  .hp > i{background:linear-gradient(90deg,#7a2b25,var(--crimson))}
+  .meta-line{display:flex; justify-content:space-between; font-size:11px; color:var(--bone-dim); margin:5px 1px 0; letter-spacing:.04em}
+  .prana{display:flex; gap:4px; margin-top:7px}
+  .drop{width:9px; height:13px; border-radius:0 0 5px 5px / 0 0 8px 8px; background:#0c1218; border:1px solid var(--line); transition:.3s}
+  .drop.full{background:radial-gradient(circle at 40% 30%, var(--ember-2), var(--ember)); border-color:var(--ember);
+    box-shadow:0 0 9px -1px var(--ember)}
+
+  /* the mind-scroll */
+  .scroll{margin-top:12px; background:
+      linear-gradient(180deg, rgba(233,226,208,.06), rgba(233,226,208,.02)),
+      var(--ink-2);
+    border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:var(--r); padding:14px 16px; min-height:88px; position:relative; box-shadow:var(--shadow)}
+  .scroll .hdr{display:flex; align-items:center; gap:8px; font-size:11px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--bone-dim)}
+  .scroll .hdr .dot{width:6px;height:6px;border-radius:50%;background:var(--accent); box-shadow:0 0 8px var(--accent)}
+  .think{font-family:"Eczar"; font-weight:500; font-size:15.5px; line-height:1.5; margin-top:7px; color:var(--bone);
+    font-style:italic; min-height:1.4em}
+  .taunt{margin-top:8px; font-size:13.5px; color:var(--accent); font-weight:500}
+  .taunt::before{content:"\201C"} .taunt::after{content:"\201D"}
+  .reading{color:var(--bone-dim); font-style:italic}
+  .reading::after{content:"\2026"; animation:blink 1.2s steps(4) infinite}
+  @keyframes blink{0%{opacity:.2}50%{opacity:1}100%{opacity:.2}}
+
+  /* moves */
+  .moves{display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-top:12px}
+  @media(min-width:620px){.moves{grid-template-columns:repeat(6,1fr)}}
+  .mv{appearance:none; cursor:pointer; text-align:left; color:var(--bone);
+    background:linear-gradient(180deg,var(--panel),#16202b); border:1px solid var(--line);
+    border-radius:12px; padding:10px 10px 11px; transition:.16s; position:relative}
+  .mv:hover:not(:disabled){border-color:var(--ember); transform:translateY(-2px); box-shadow:0 10px 22px -12px var(--ember)}
+  .mv:disabled{opacity:.38; cursor:not-allowed}
+  .mv .g{font-size:18px} .mv .l{display:block; font-family:"Eczar"; font-size:13px; margin-top:3px; font-weight:600}
+  .mv .c{font-size:10.5px; color:var(--ember-2); letter-spacing:.04em; margin-top:2px}
+  .mv .c.free{color:var(--bone-dim)}
+
+  .log{margin-top:14px; font-size:12.5px; color:var(--bone-dim); line-height:1.7; max-height:120px; overflow:auto;
+    border-top:1px dashed var(--line); padding-top:10px}
+  .log b{color:var(--bone); font-weight:500}
+
+  /* overlays */
+  .ov{position:fixed; inset:0; z-index:20; display:grid; place-items:center; padding:24px;
+    background:radial-gradient(800px 500px at 50% 40%, rgba(20,30,42,.9), rgba(5,8,12,.96)); backdrop-filter:blur(3px)}
+  .ov.hide{display:none}
+  .card{max-width:440px; width:100%; text-align:center; background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line); border-radius:18px; padding:30px 26px; box-shadow:var(--shadow); animation:rise .5s both}
+  @keyframes rise{from{opacity:0; transform:translateY(14px)}to{opacity:1; transform:none}}
+  .card .em{font-size:40px}
+  .card h2{font-family:"Eczar"; font-weight:700; font-size:25px; margin:.4em 0 .1em}
+  .card .sub{color:var(--bone-dim); font-size:13.5px; letter-spacing:.03em}
+  .card .bio{font-size:14px; line-height:1.6; margin:16px 0 6px}
+  .btn{appearance:none; cursor:pointer; margin-top:18px; font-family:"Mukta"; font-weight:600; font-size:15px;
+    color:#10171f; background:linear-gradient(180deg,var(--ember-2),var(--ember)); border:none; border-radius:11px;
+    padding:12px 26px; letter-spacing:.03em; box-shadow:0 10px 24px -10px var(--ember); transition:.15s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn.ghost{background:transparent; color:var(--bone); border:1px solid var(--line); box-shadow:none}
+  .floats{position:absolute; inset:0; pointer-events:none}
+  .float{position:absolute; font-family:"Eczar"; font-weight:700; font-size:22px; animation:fl 1s ease-out forwards}
+  @keyframes fl{from{opacity:0; transform:translateY(8px) scale(.9)}20%{opacity:1}to{opacity:0; transform:translateY(-26px)}}
+  .shake{animation:shake .4s}
+  @keyframes shake{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+</style>
+</head>
+<body>
+  <div class="sky"><div class="mist"></div><div class="mist m2"></div><div class="mist m3"></div><div class="ridge"></div></div>
+  <div class="grain"></div>
+
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <span class="deva">॥ धुंध ॥</span>
+        <h1>THE MIST DUEL</h1>
+        <span class="tag">read your opponent before they move — they are reading you</span>
+      </div>
+      <div style="text-align:right">
+        <div class="pips" id="pips"></div>
+        <div class="backend" id="backend"></div>
+      </div>
+    </header>
+
+    <!-- BATTLE STAGE: both fighters share one scene -->
+    <div class="stage" id="stage">
+      <div class="lantern l1"></div><div class="lantern l2"></div><div class="lantern l3"></div>
+
+      <div class="slot right" id="slotOpp">
+        <div class="shadow"></div>
+        <div class="sprite" id="oppSprite"></div>
+      </div>
+
+      <div class="slot left" id="slotPl">
+        <div class="shadow"></div>
+        <div class="sprite" id="plSprite"></div>
+      </div>
+
+      <div class="fx" id="fx"></div>
+      <div class="ground"></div>
+    </div>
+
+    <!-- INFO PANELS: name / HP / prana side by side -->
+    <div class="info-row">
+      <div class="fighter player" id="plPanel">
+        <div class="who">
+          <div class="nm">You</div>
+          <div class="ti">challenger of the hidden village</div>
+        </div>
+        <div class="bars">
+          <div class="bar hp"><i id="plHp" style="width:100%"></i></div>
+          <div class="meta-line"><span id="plHpTxt">100 HP</span><span>prana</span></div>
+          <div class="prana" id="plPrana"></div>
+        </div>
+        <div class="floats" id="plFloats"></div>
+      </div>
+
+      <div class="fighter opp" id="oppPanel">
+        <div class="who">
+          <div class="nm" id="oppName">—</div>
+          <div class="ti" id="oppTitle"></div>
+        </div>
+        <div class="bars">
+          <div class="bar hp"><i id="oppHp" style="width:100%"></i></div>
+          <div class="meta-line"><span id="oppHpTxt">100 HP</span><span>prana</span></div>
+          <div class="prana" id="oppPrana"></div>
+        </div>
+        <div class="floats" id="oppFloats"></div>
+      </div>
+    </div>
+
+    <!-- MIND-SCROLL -->
+    <div class="scroll" id="scroll">
+      <div class="hdr"><span class="dot"></span><span id="scrollLabel">the mind of your opponent</span></div>
+      <div class="think reading" id="think">awaiting the opening round.</div>
+      <div class="taunt" id="taunt" style="display:none"></div>
+    </div>
+
+    <div class="moves" id="moves"></div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <!-- intro / versus overlay -->
+  <div class="ov" id="overlay">
+    <div class="card" id="card">
+      <div class="em" id="cardEm">⛰</div>
+      <h2 id="cardTitle">The Mind of Tashi</h2>
+      <div class="sub" id="cardSub">a duel of foresight in the hidden Himalaya</div>
+      <div class="bio" id="cardBio">Five champions guard the path to the summit. Each round you both commit a move in secret — you cannot react, only read. Beat your read, climb the mountain.</div>
+      <button class="btn" id="cardBtn">Enter the mist</button>
+      <div><button class="btn ghost" id="cardBtn2" style="display:none">Walk back down</button></div>
+    </div>
+  </div>
+
+  <script id="game-meta" type="application/json">__GAME_META__</script>
+
+<script type="module">
+import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
+
+const META = JSON.parse(document.getElementById("game-meta").textContent);
+const MOVES = Object.fromEntries(META.moves.map(m => [m.id, m]));
+const $ = id => document.getElementById(id);
+
+let client = null;
+let state = null;
+let ladderIndex = 0;
+let busy = false;
+
+$("backend").textContent = "opponent: " + META.backend;
+renderPips();
+
+(async () => {
+  try { client = await Client.connect(window.location.origin); }
+  catch (e) { console.warn("Gradio client offline:", e); }
+})();
+
+// --------------------------------------------------------------------------
+// PIXEL-SPRITE SYSTEM
+// Each pose is a list of rects on a 16x20 grid. Persona colors come from the
+// opponent's accent; the player has a fixed ember palette. `currentColor`
+// lets us recolor robe pixels via CSS without rebuilding the SVG.
+// --------------------------------------------------------------------------
+const PLAYER_PALETTE = { robe:"#3f7d5a", trim:"#e8a13a", skin:"#d4a373", hair:"#1c1a17", sash:"#c0473b", aura:"#e8a13a" };
+
+function paletteFor(opponent){
+  // tint the monk's robe with the opponent's accent; keep skin/hair stable
+  return { robe:opponent.accent, trim:"#e9e2d0", skin:"#caa074", hair:"#1c1a17", sash:"#0d1117", aura:opponent.accent };
+}
+
+// 16x20 grid; coordinates are (x,y,w,h,colorKey)
+const POSES = {
+  idle: [
+    [7,1,3,2,"hair"],          // hair top
+    [7,3,3,2,"skin"],          // face
+    [8,4,1,1,"hair"],           // brow tuft
+    [6,5,5,4,"robe"],           // torso
+    [6,6,5,1,"trim"],           // collar trim
+    [6,8,5,1,"sash"],           // sash
+    [5,6,1,3,"robe"],           // left shoulder/arm
+    [11,6,1,3,"robe"],          // right shoulder/arm
+    [5,9,1,2,"skin"],           // left hand
+    [11,9,1,2,"skin"],          // right hand
+    [6,9,2,6,"robe"],           // left leg
+    [9,9,2,6,"robe"],           // right leg
+    [5,15,3,1,"hair"],          // left foot
+    [9,15,3,1,"hair"],          // right foot
+  ],
+  strike: [
+    [7,2,3,2,"hair"],
+    [7,4,3,2,"skin"],
+    [6,6,5,3,"robe"],
+    [6,7,5,1,"trim"],
+    [6,8,5,1,"sash"],
+    [4,6,2,1,"robe"],           // rear arm cocked
+    [11,5,3,1,"robe"],          // lead arm extended
+    [14,4,2,3,"robe"],          // forearm
+    [15,3,1,1,"trim"],          // fist glow
+    [15,5,1,3,"skin"],          // fist
+    [5,9,2,5,"robe"],           // rear leg planted
+    [9,9,3,5,"robe"],           // lead leg forward
+    [4,14,3,2,"hair"],
+    [10,14,4,2,"hair"],
+  ],
+  guard: [
+    [7,3,3,2,"hair"],
+    [7,5,3,2,"skin"],
+    [5,7,7,4,"robe"],           // hunkered torso
+    [5,8,7,1,"trim"],
+    [5,10,7,1,"sash"],
+    [4,5,3,3,"robe"],           // arms up across chest L
+    [9,5,3,3,"robe"],           // arms up across chest R
+    [4,7,1,1,"skin"],
+    [11,7,1,1,"skin"],
+    [5,11,3,4,"robe"],          // wide stance L
+    [8,11,3,4,"robe"],          // wide stance R
+    [4,15,4,1,"hair"],
+    [8,15,4,1,"hair"],
+  ],
+  grapple: [
+    [7,2,3,2,"hair"],
+    [7,4,3,2,"skin"],
+    [6,6,5,3,"robe"],
+    [6,7,5,1,"trim"],
+    [6,8,5,1,"sash"],
+    [11,5,3,1,"robe"],          // both arms reach forward
+    [11,7,3,1,"robe"],
+    [14,5,1,3,"skin"],
+    [14,7,1,3,"skin"],
+    [5,9,2,5,"robe"],
+    [9,9,3,5,"robe"],
+    [4,14,3,2,"hair"],
+    [10,14,4,2,"hair"],
+  ],
+  focus: [
+    [7,4,3,2,"hair"],
+    [7,6,3,2,"skin"],            // meditating, eyes closed (no extra brow)
+    [5,8,7,4,"robe"],            // seated/lower body wider
+    [5,9,7,1,"trim"],
+    [5,11,7,1,"sash"],
+    [4,9,2,2,"robe"],            // hands in lap
+    [10,9,2,2,"robe"],
+    [4,11,8,2,"robe"],           // crossed legs
+    [3,13,10,2,"robe"],
+    [3,15,10,1,"hair"],
+  ],
+  art: [
+    [7,1,3,2,"hair"],
+    [7,3,3,2,"skin"],
+    [6,5,5,4,"robe"],
+    [6,6,5,1,"trim"],
+    [6,8,5,1,"sash"],
+    [11,2,2,1,"robe"],           // both arms raised, palms out
+    [13,3,1,3,"robe"],
+    [14,2,2,2,"trim"],           // glow at palm
+    [4,2,2,1,"robe"],
+    [3,3,1,3,"robe"],
+    [2,2,2,2,"trim"],
+    [6,9,2,6,"robe"],
+    [9,9,2,6,"robe"],
+    [5,15,3,1,"hair"],
+    [9,15,3,1,"hair"],
+  ],
+  mist_step: [
+    // partial silhouette — sprite is intentionally sparse; CSS blur sells it
+    [7,2,3,2,"hair"],
+    [7,4,3,2,"skin"],
+    [7,6,3,3,"robe"],
+    [7,7,3,1,"trim"],
+    [11,4,2,1,"robe"],
+    [9,9,1,5,"robe"],
+    [10,14,2,2,"hair"],
+  ],
+};
+
+function spriteSVG(pose, palette){
+  const cells = POSES[pose] || POSES.idle;
+  const pixels = cells.map(([x,y,w,h,k]) =>
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${palette[k] || palette.robe}" shape-rendering="crispEdges"/>`
+  ).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 20" width="100%" height="100%" style="image-rendering:pixelated">${pixels}</svg>`;
+}
+
+function setPose(spriteEl, pose, palette){
+  spriteEl.innerHTML = spriteSVG(pose, palette);
+  // re-trigger any pose animation by reflow
+  spriteEl.classList.remove(...[...spriteEl.classList].filter(c => c.startsWith("pose-") || c === "hit"));
+  void spriteEl.offsetWidth;
+  spriteEl.classList.add("pose-" + pose);
+  // hold the pose visual for ~600ms then return to idle frame (animation already ran)
+  clearTimeout(spriteEl._poseTimer);
+  spriteEl._poseTimer = setTimeout(() => {
+    spriteEl.innerHTML = spriteSVG("idle", palette);
+  }, 700);
+}
+
+// --------------------------------------------------------------------------
+// GAME FLOW
+// --------------------------------------------------------------------------
+let playerPalette = PLAYER_PALETTE;
+let oppPalette = paletteFor(META.ladder[0]);
+
+function renderPips(){
+  const p = $("pips"); p.innerHTML = "";
+  META.ladder.forEach((o,i) => {
+    const d = document.createElement("div");
+    d.className = "pip" + (i < ladderIndex ? " on" : "");
+    p.appendChild(d);
+  });
+}
+
+function newFight(){
+  const opp = META.ladder[ladderIndex];
+  document.documentElement.style.setProperty("--accent", opp.accent);
+  oppPalette = paletteFor(opp);
+  state = {
+    opponent_id: opp.id, round: 1,
+    player_hp: META.max_hp, ai_hp: META.max_hp,
+    player_prana: META.start_prana, ai_prana: META.start_prana,
+    history: [],
+  };
+  $("oppName").textContent = opp.name;
+  $("oppTitle").textContent = opp.title;
+  $("think").className = "think reading";
+  $("think").textContent = "sizing you up";
+  $("taunt").style.display = "none";
+  $("log").innerHTML = "";
+  $("scrollLabel").textContent = "the mind of " + opp.name;
+  $("plSprite").innerHTML = spriteSVG("idle", playerPalette);
+  $("oppSprite").innerHTML = spriteSVG("idle", oppPalette);
+  $("fx").innerHTML = "";
+  renderMoves(); renderState(); renderPips();
+}
+
+function renderMoves(){
+  const box = $("moves"); box.innerHTML = "";
+  META.moves.forEach(m => {
+    const b = document.createElement("button");
+    b.className = "mv"; b.dataset.move = m.id;
+    b.disabled = state.player_prana < m.cost || busy;
+    b.title = m.blurb;
+    b.innerHTML = `<span class="g">${m.glyph}</span>
+      <span class="l">${m.label}</span>
+      <span class="c ${m.cost? "":"free"}">${m.cost? m.cost+" prana" : "free"}</span>`;
+    b.onclick = () => commit(m.id);
+    box.appendChild(b);
+  });
+}
+
+function renderState(){
+  $("plHp").style.width  = pct(state.player_hp) + "%";
+  $("oppHp").style.width = pct(state.ai_hp) + "%";
+  $("plHpTxt").textContent  = Math.max(0,state.player_hp) + " HP";
+  $("oppHpTxt").textContent = Math.max(0,state.ai_hp) + " HP";
+  drops($("plPrana"), state.player_prana);
+  drops($("oppPrana"), state.ai_prana);
+}
+const pct = hp => Math.max(0, Math.min(100, hp/META.max_hp*100));
+function drops(box, n){
+  box.innerHTML = "";
+  for(let i=0;i<META.max_prana;i++){
+    const d = document.createElement("div");
+    d.className = "drop" + (i < n ? " full":"");
+    box.appendChild(d);
+  }
+}
+
+async function commit(playerMove){
+  if (busy || !state) return;
+  busy = true; renderMoves();
+  $("taunt").style.display = "none";
+  $("think").className = "think reading"; $("think").textContent = "reading your pattern";
+
+  state.player_move = playerMove;
+  let data;
+  try{
+    if(!client) client = await Client.connect(window.location.origin);
+    const res = await client.predict("/ai_turn", { state_json: JSON.stringify(state) });
+    data = JSON.parse(res.data[0]);
+  }catch(e){
+    $("think").className = "think"; $("think").textContent =
+      "The duel needs its backend. Run `python app.py` and open the served page.";
+    busy = false; renderMoves(); return;
+  }
+
+  await reveal(playerMove, data);
+
+  state.player_hp = data.player_hp; state.ai_hp = data.ai_hp;
+  state.player_prana = data.player_prana; state.ai_prana = data.ai_prana;
+  state.history = data.history; state.round += 1;
+  delete state.player_move;
+  renderState();
+
+  data.log.forEach(line => addLog(line));
+  if (data.status !== "continue"){ busy=false; return endRound(data); }
+
+  busy = false; renderMoves();
+}
+
+// --------------------------------------------------------------------------
+// REVEAL — both fighters strike their pose simultaneously, FX fires, hits land
+// --------------------------------------------------------------------------
+async function reveal(playerMove, data){
+  const pl = playerMove.toLowerCase();
+  const op = String(data.ai_move).toLowerCase();
+
+  // VS banner across the top of the stage
+  showBanner(MOVES[playerMove].label, MOVES[data.ai_move].label);
+
+  // both poses ignite at once
+  setPose($("plSprite"), pl, playerPalette);
+  setPose($("oppSprite"), op, oppPalette);
+
+  // move-specific FX, fired in stage coordinates
+  fireFX(pl, "left");
+  fireFX(op, "right");
+
+  // reveal the mind-scroll after a beat — it's the read, not narration
+  await wait(380);
+  $("think").className = "think";
+  $("think").textContent = data.reasoning;
+  if (data.taunt && data.taunt !== "..."){ $("taunt").textContent = data.taunt; $("taunt").style.display=""; }
+
+  // hits land after the wind-up — opponent flashes if they took damage
+  await wait(120);
+  if (data.player_dmg){
+    $("plSprite").classList.add("hit");
+    impactAt("left");
+    floatDmg($("plFloats"), data.player_dmg, $("plPanel"));
+    setTimeout(()=>$("plSprite").classList.remove("hit"), 460);
+  }
+  if (data.ai_dmg){
+    $("oppSprite").classList.add("hit");
+    impactAt("right");
+    floatDmg($("oppFloats"), data.ai_dmg, $("oppPanel"));
+    setTimeout(()=>$("oppSprite").classList.remove("hit"), 460);
+  }
+  await wait(600);
+}
+
+function fireFX(move, side){
+  const fx = $("fx");
+  if (move === "art"){
+    const p = document.createElement("div");
+    p.className = "projectile" + (side === "right" ? " rev" : "");
+    fx.appendChild(p);
+    setTimeout(()=>p.remove(), 600);
+  } else if (move === "mist_step"){
+    const m = document.createElement("div");
+    m.className = "mistpuff";
+    m.style.left = side === "left" ? "16%" : "84%";
+    m.style.bottom = "70px";
+    fx.appendChild(m);
+    setTimeout(()=>m.remove(), 950);
+  } else if (move === "guard"){
+    const a = document.createElement("div");
+    a.className = "aura";
+    a.style.left = side === "left" ? "16%" : "84%";
+    a.style.bottom = "70px";
+    fx.appendChild(a);
+    setTimeout(()=>a.remove(), 600);
+  } else if (move === "focus"){
+    const b = document.createElement("div");
+    b.className = "breath";
+    b.style.left = side === "left" ? "16%" : "84%";
+    b.style.bottom = "100px";
+    fx.appendChild(b);
+    setTimeout(()=>b.remove(), 1150);
+  }
+}
+
+function impactAt(victimSide){
+  const i = document.createElement("div");
+  i.className = "impact";
+  i.style.left = victimSide === "left" ? "20%" : "80%";
+  i.style.bottom = "100px";
+  $("fx").appendChild(i);
+  setTimeout(()=>i.remove(), 470);
+}
+
+function showBanner(playerLabel, aiLabel){
+  const old = document.querySelector(".move-banner"); if (old) old.remove();
+  const b = document.createElement("div");
+  b.className = "move-banner";
+  b.innerHTML = `<span class="pl">${playerLabel}</span><span class="vs">vs</span><span>${aiLabel}</span>`;
+  $("stage").appendChild(b);
+  setTimeout(()=>b.remove(), 1000);
+}
+
+function floatDmg(box, dmg, panel){
+  const f = document.createElement("div");
+  f.className = "float"; f.textContent = "-" + dmg;
+  f.style.color = "var(--crimson)";
+  f.style.left = (20 + Math.random()*55) + "%"; f.style.top = "12px";
+  box.appendChild(f); panel.classList.add("shake");
+  setTimeout(()=>{ f.remove(); panel.classList.remove("shake"); }, 1000);
+}
+
+function addLog(line){
+  const d = document.createElement("div");
+  d.innerHTML = `<b>R${state.round}.</b> ${line}`;
+  $("log").prepend(d);
+}
+
+function endRound(data){
+  const opp = META.ladder[ladderIndex];
+  const o = $("overlay"), b2 = $("cardBtn2");
+  b2.style.display = "none";
+  if (data.status === "advance"){
+    ladderIndex++; renderPips();
+    const nxt = META.ladder[ladderIndex];
+    $("cardEm").textContent = nxt.glyph;
+    $("cardTitle").textContent = `${opp.name} falls`;
+    $("cardSub").textContent = `next: ${nxt.name}, ${nxt.title}`;
+    $("cardBio").textContent = nxt.bio;
+    $("cardBtn").textContent = "Face " + nxt.name;
+    $("cardBtn").onclick = () => { o.classList.add("hide"); newFight(); };
+  } else if (data.status === "ladder_clear"){
+    $("cardEm").textContent = "✦";
+    $("cardTitle").textContent = "The summit is yours";
+    $("cardSub").textContent = "you out-read every champion of the mist";
+    $("cardBio").textContent = "You climbed the whole mountain by predicting minds that were predicting yours. Show a friend — then see if they can.";
+    $("cardBtn").textContent = "Climb again";
+    $("cardBtn").onclick = () => { ladderIndex=0; o.classList.add("hide"); newFight(); };
+  } else {
+    $("cardEm").textContent = data.status==="double_ko" ? "⚔" : "🩸";
+    $("cardTitle").textContent = data.status==="double_ko" ? "Both fall" : `${opp.name} reads you true`;
+    $("cardSub").textContent = "the mist keeps its champion";
+    $("cardBio").textContent = "Every loss is a tell you gave away. Watch how it punished your pattern — then take the path again.";
+    $("cardBtn").textContent = "Take the path again";
+    $("cardBtn").onclick = () => { o.classList.add("hide"); newFight(); };
+  }
+  o.classList.remove("hide");
+}
+
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+$("cardBtn").onclick = () => { $("overlay").classList.add("hide"); newFight(); };
+</script>
+</body>
+</html>
