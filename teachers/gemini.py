@@ -7,6 +7,7 @@ response holds `text` + (optionally) thought parts. We coerce to the same
 """
 
 from __future__ import annotations
+import asyncio
 import os
 from typing import Any, Dict, List, Optional
 
@@ -20,6 +21,14 @@ from .base import (
     legal_moves,
     temperature_for,
 )
+
+
+# Per-request hard timeout. google-genai's async client has no default timeout
+# and will block forever on a stalled connection — that's the root cause of the
+# 2026-05-28 harvest hang. The pool already wraps each teacher in its own retry
+# loop, so a 90s cap here is generous enough for slow models (gemini-2.5-pro on
+# a long context) without letting a single bad call wedge the harness.
+_REQUEST_TIMEOUT_S = 90.0
 
 
 class GeminiTeacher(Teacher):
@@ -74,11 +83,20 @@ class GeminiTeacher(Teacher):
         config = genai_types.GenerateContentConfig(**config_kwargs)
 
         try:
-            resp = await self._client.aio.models.generate_content(
-                model=self.model,
-                contents=user_text,
-                config=config,
+            resp = await asyncio.wait_for(
+                self._client.aio.models.generate_content(
+                    model=self.model,
+                    contents=user_text,
+                    config=config,
+                ),
+                timeout=_REQUEST_TIMEOUT_S,
             )
+        except asyncio.TimeoutError as exc:
+            # Treat client-side timeout as retryable so the pool can fail over
+            # to the next teacher rather than crash the whole match.
+            raise RetryableError(
+                f"gemini {self.model} timed out after {_REQUEST_TIMEOUT_S}s"
+            ) from exc
         except Exception as exc:
             # Gemini SDK raises various provider errors; treat 429/5xx-like as retryable.
             msg = str(exc).lower()

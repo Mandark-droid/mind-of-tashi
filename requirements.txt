@@ -1,4 +1,4 @@
-# --- The Mind of Tashi: dependencies ---------------------------------------------
+# --- The Mind of Tashi: dependencies -----------------------------------------
 # Gradio 6 brings gradio.Server (custom frontend + Gradio backend). FastAPI is
 # pinned explicitly because app.py imports `fastapi.responses.HTMLResponse`
 # directly — relying on it as a transitive dep of gradio is fragile across
@@ -21,6 +21,27 @@ huggingface_hub>=0.27.0
 # requirements-dev.txt) because a single `pip install -r requirements.txt` is
 # the project's documented install path. On Spaces these still install but
 # nothing imports them at request time.
-aiohttp>=3.9
 python-dotenv>=1.0
+
+# LLM SDKs for the self-play teachers. We use the official Python clients
+# (not raw aiohttp) so genai-otel-instrument's built-in instrumentors fire
+# automatically and emit gen_ai.* spans with token-count / cost / eval
+# enrichment. openai's client also covers OpenRouter, Mistral, and Sarvam
+# via per-provider base_url overrides.
 google-genai>=0.3
+openai>=1.50
+ollama>=0.4
+
+# --- Observability for data-generation runs (self-play + live capture) -------
+# `genai-otel-instrument` auto-traces LLM SDKs (openai/google-genai/ollama/
+# anthropic/...) with no code changes, plus optional GPU / cost / CO2 / eval
+# metrics. Telemetry ships OTLP/HTTP to the collector on our traceverse VM.
+# Bootstrap lives in `otel_bootstrap.py`; toggle with GENAI_OTEL_DISABLE=1.
+# The [gpu] extra pulls pynvml for NVIDIA GPU metrics — harmless on CPU-only
+# boxes (it just reports no GPUs).
+genai-otel-instrument[gpu]>=0.1
+# genai-otel-instrument's openai/ollama wrappers are unreliable in v1.3.1
+# (they log "enabled" but no spans land). Both SDKs ride on httpx, so we
+# instrument that layer directly — every LLM call shows up as a span with
+# URL + status + duration.
+opentelemetry-instrumentation-httpx>=0.50

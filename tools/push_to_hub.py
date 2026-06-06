@@ -64,7 +64,7 @@ tags:
   - sft
 size_categories:
   - n<10K
-pretty_name: Mind of Tashi — self-play traces
+pretty_name: The Mind of Tashi — self-play traces
 configs:
   - config_name: sft
     default: true
@@ -89,11 +89,14 @@ configs:
         path: "baselines/*.jsonl"
 ---
 
-# Mind of Tashi — self-play traces (private)
+# The Mind of Tashi — self-play traces (private)
 
 Self-play data harvested for SFT of a small reasoning model that plays
-**The Mind of Tashi** — a simultaneous-commit ritual fighting game where the
-opponent's `<think>` block is the centrepiece of the player experience.
+**The Mind of Tashi** — a simultaneous-commit ritual fighting game where
+the opponent's `<think>` block is the centrepiece of the player
+experience. (Repo slug `mind-of-tashi-traces` predates the 2026-05-27
+rename and is kept stable to avoid breaking the harvest cron; the
+public copy at hackathon launch will live under `mind-of-tashi-traces`.)
 
 **This repo is private.** The dataset is part of an unfinished hackathon
 submission and is not for public consumption yet.

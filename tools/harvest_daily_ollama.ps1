@@ -9,7 +9,7 @@
 #     daily free-tier quotas across ~32 Gemini/OpenRouter/Mistral/Sarvam
 #     specs. Independent failure modes, so we want them on independent
 #     schedules.
-#   - Splitting them by 6 hours (API at 12:00 IST, Ollama at 18:00 IST)
+#   - Splitting them across the day (API at 12:00 IST, Ollama at 15:00 IST)
 #     means today's data has landed on Hub by the time the user looks at
 #     the dataset viewer in the evening, AND it spreads the wall-time
 #     load across the day rather than running an 80-min job back-to-back.
@@ -19,7 +19,8 @@
 #
 # Pipeline (each step logs to data/selfplay/cron.log; failures don't abort):
 #   1. (skipped) refresh OpenRouter pool -- not used here; Ollama is local.
-#   2. run a 5x5 persona sweep, qwen3:1.7b vs qwen3.5:4b, max 30 rounds.
+#   2. run the persona sweep (10x10 matchup matrix, capped at 25 matches per
+#      run since 2026-05-27), qwen3:1.7b vs qwen3.5:4b, max 30 rounds.
 #   3. filter cumulative selfplay output into BOTH single-turn and
 #      multi-turn SFT JSONLs.
 #   4. push the data/ directory to the private HF Dataset.
@@ -71,13 +72,13 @@ Log "projDir: $projDir"
 # reasoning is discarded at row-write time per role asymmetry.
 # Opponent: qwen3.5:4b (~3.4 GB) -- richer reads, ~3s/turn on the user's
 # RTX 3060. Its full <think>+JSON is the SFT target.
-Log "[step 2] self-play sweep, ollama qwen3:1.7b vs qwen3.5:4b, max 30 rounds, cap 50 matches"
+Log "[step 2] self-play sweep, ollama qwen3:1.7b vs qwen3.5:4b, max 30 rounds, cap 25 matches"
 & $python -m tools.selfplay --sweep --matches 1 `
     --player-teacher ollama:qwen3:1.7b `
     --opponent-teacher ollama:qwen3.5:4b `
     --output-dir "..\data\selfplay" `
     --quota-file "..\data\selfplay\.quota.json" `
-    --max-rounds 30 --max-matches-per-run 50 2>&1 | Add-Content -Path $logFile -Encoding utf8
+    --max-rounds 30 --max-matches-per-run 25 2>&1 | Add-Content -Path $logFile -Encoding utf8
 Log "[step 2] exit code $LASTEXITCODE"
 
 # --- step 3: prep cumulative SFT corpus, BOTH shapes ---------------------- #

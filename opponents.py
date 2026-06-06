@@ -1,7 +1,7 @@
 """
 opponents.py — the gauntlet.
 
-TEN champions of the mist-hidden village, climbing from a hot-headed initiate
+TEN champions of the Village Hidden in the Mist, climbing from a hot-headed initiate
 to a being beyond the summit itself. Each is defined by:
 
   * a TEMPERAMENT the model speaks in (its taunts / mind-scroll voice), and

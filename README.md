@@ -16,10 +16,10 @@ hf_oauth_scopes:
 
 # The Mind of Tashi — a duel of foresight
 
-> Placeholder title — final name TBD (candidates: **Trikaal**, **Yukti**, **Antaryami**, **Dwandva**).
+> Working title: **The Mind of Tashi** (renamed from "The Mind of Tashi" — folder slugs kept for cron stability).
 > Built for the **Build Small Hackathon · Track Two: An Adventure in Thousand Token Wood**.
 
-You climb a gauntlet of ninja-monks in a mist-hidden Himalayan village. Every round, you
+You climb a gauntlet of ninja-monks in the Village Hidden in the Mist, high in the Himalayas. Every round, you
 and your opponent **secretly commit one move at the same time** — there is no reacting,
 only *reading*. The opponent is a small reasoning model, and the thing on centre stage is
 its **mind**: after each commit, the scroll reveals how it just read you ("you've drawn

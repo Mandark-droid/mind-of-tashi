@@ -25,9 +25,16 @@ import os
 from typing import Any, Dict, Optional
 
 from opponents import Opponent
+from otel_bootstrap import init_otel
 
 
 SELFPLAY_MODE = os.environ.get("SELFPLAY_MODE", "0") == "1"
+
+# Instrument up front (cheap no-op when disabled) so the LLM teachers we
+# lazily construct later get auto-traced. Safe to call regardless of
+# SELFPLAY_MODE — init_otel is idempotent.
+if SELFPLAY_MODE:
+    init_otel(service_name="mind-of-tashi-selfplay-live")
 # Defaults tuned for 6 GB VRAM (RTX 3060): qwen3.5:4b on opponent for
 # stronger reads (returns in ~3s on the user's box), qwen3:1.7b on
 # player for fast moves. Different scales -> Ollama swaps cleanly,

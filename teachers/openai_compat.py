@@ -1,14 +1,15 @@
 """OpenAI-compatible teacher — covers OpenRouter, Mistral, and Sarvam.
 
-All three expose `/v1/chat/completions` with the same request/response shape,
-so one class with a provider-keyed config does the job.
+All three speak `/v1/chat/completions` with the OpenAI request/response shape,
+so we use the official `openai` AsyncOpenAI client with a per-provider
+`base_url`. Going through the SDK (rather than raw aiohttp) means
+`genai-otel-instrument`'s OpenAIInstrumentor auto-emits `gen_ai.*` spans
+with token counts and latency, which the cost + eval enrichers consume.
 """
 
 from __future__ import annotations
 import os
 from typing import Any, Dict, List, Optional
-
-import aiohttp
 
 import prompts
 from opponents import Opponent
@@ -34,7 +35,6 @@ PROVIDER_CONFIG: Dict[str, Dict[str, str]] = {
         "api_key_env": "MISTRAL_API_KEY",
     },
     "sarvam": {
-        # Sarvam's chat-completions endpoint is OpenAI-compatible.
         "base_url": "https://api.sarvam.ai/v1",
         "api_key_env": "SARVAM_API_KEY",
     },
@@ -49,6 +49,9 @@ class OpenAICompatTeacher(Teacher):
         base_url: str,
         api_key_env: str,
     ) -> None:
+        # Lazy import so non-openai-compat runs don't pay the import cost.
+        from openai import AsyncOpenAI  # type: ignore
+
         self.name = provider
         self.provider = provider
         self.model = model
@@ -58,70 +61,67 @@ class OpenAICompatTeacher(Teacher):
             raise RuntimeError(
                 f"{api_key_env} is not set; cannot use {provider}:{model} teacher"
             )
-        self._session: Optional[aiohttp.ClientSession] = None
-
-    def _ensure_session(self) -> aiohttp.ClientSession:
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
-        return self._session
+        # OpenRouter expects a Referer + Title header for attribution.
+        default_headers: Dict[str, str] = {}
+        if provider == "openrouter":
+            default_headers["HTTP-Referer"] = "https://github.com/mind-of-tashi"
+            default_headers["X-Title"] = "Mind of Tashi self-play"
+        self._client = AsyncOpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            timeout=120.0,
+            max_retries=0,  # we own retry in Teacher.choose
+            default_headers=default_headers or None,
+        )
 
     async def aclose(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
-            self._session = None
+        try:
+            await self._client.close()
+        except Exception:
+            pass
 
     async def _choose_async(
         self, opp: Opponent, state: Dict[str, Any], legal: List[str]
     ) -> ChoiceResult:
         messages = build_messages(opp, state)
-        body = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature_for(opp),
-            "top_p": 0.9,
-            # API providers can afford a generous budget; the local llama.cpp
-            # path uses tighter caps. Without slack here the model gets cut
-            # off mid-<think> and never emits the JSON line — parse_reply
-            # would silently fall back to GUARD.
-            "max_tokens": opp.think_tokens * 3 + 200,
-        }
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        # OpenRouter encourages a referer + app title.
-        if self.provider == "openrouter":
-            headers.setdefault("HTTP-Referer", "https://github.com/mind-of-tashi")
-            headers.setdefault("X-Title", "Mind of Tashi self-play")
 
-        session = self._ensure_session()
+        # APIError + status-code import is local: openai.APIStatusError covers
+        # HTTP errors and APIConnectionError covers transport.
+        from openai import APIConnectionError, APIStatusError, RateLimitError  # type: ignore
+
         try:
-            async with session.post(
-                f"{self.base_url}/chat/completions",
-                json=body,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=120),
-            ) as resp:
-                if resp.status in (408, 429, 500, 502, 503, 504):
-                    body_text = await resp.text()
-                    raise RetryableError(
-                        f"{self.provider} HTTP {resp.status}: {body_text[:200]}"
-                    )
-                if resp.status >= 400:
-                    body_text = await resp.text()
-                    raise RuntimeError(
-                        f"{self.provider} HTTP {resp.status}: {body_text[:300]}"
-                    )
-                data = await resp.json()
-        except aiohttp.ClientError as exc:
-            raise RetryableError(f"{self.provider} client error: {exc}") from exc
+            resp = await self._client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature_for(opp),
+                top_p=0.9,
+                # API providers can afford a generous budget; the local llama.cpp
+                # path uses tighter caps. Without slack here the model gets cut
+                # off mid-<think> and never emits the JSON line — parse_reply
+                # would silently fall back to GUARD.
+                max_tokens=opp.think_tokens * 3 + 200,
+            )
+        except RateLimitError as exc:
+            raise RetryableError(f"{self.provider} rate-limited: {exc}") from exc
+        except APIStatusError as exc:
+            if exc.status_code in (408, 429, 500, 502, 503, 504):
+                raise RetryableError(
+                    f"{self.provider} HTTP {exc.status_code}: {str(exc)[:200]}"
+                ) from exc
+            raise RuntimeError(
+                f"{self.provider} HTTP {exc.status_code}: {str(exc)[:300]}"
+            ) from exc
+        except APIConnectionError as exc:
+            raise RetryableError(f"{self.provider} connection error: {exc}") from exc
 
-        choice = (data.get("choices") or [{}])[0]
-        msg = choice.get("message") or {}
+        choice = resp.choices[0]
+        msg = choice.message
+        content = msg.content or ""
         # Some providers (DeepSeek-R1 family, OpenAI o1) split <think> into a
-        # separate `reasoning_content` field. Concatenate so parse_reply finds it.
-        reasoning_extra = msg.get("reasoning_content") or msg.get("reasoning") or ""
-        content = msg.get("content", "") or ""
+        # separate `reasoning_content` field. The openai SDK exposes unknown
+        # fields via model_extra (Pydantic). Pull both names defensively.
+        extras = (msg.model_extra or {}) if hasattr(msg, "model_extra") else {}
+        reasoning_extra = extras.get("reasoning_content") or extras.get("reasoning") or ""
         if reasoning_extra and "<think>" not in content:
             raw = f"<think>{reasoning_extra}</think>\n{content}"
         else:
@@ -138,15 +138,15 @@ class OpenAICompatTeacher(Teacher):
                 raw = raw[:j] + "</think>\n" + raw[j:]
         parsed = prompts.parse_reply(raw, legal)
 
-        usage = data.get("usage", {}) or {}
+        usage = resp.usage
         return ChoiceResult(
             parsed=parsed,
             raw=raw,
             meta={
                 "backend": self.provider,
                 "model": self.model,
-                "prompt_tokens": usage.get("prompt_tokens"),
-                "completion_tokens": usage.get("completion_tokens"),
-                "finish_reason": choice.get("finish_reason"),
+                "prompt_tokens": getattr(usage, "prompt_tokens", None) if usage else None,
+                "completion_tokens": getattr(usage, "completion_tokens", None) if usage else None,
+                "finish_reason": choice.finish_reason,
             },
         )

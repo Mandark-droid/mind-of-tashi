@@ -27,6 +27,13 @@ try:
 except ImportError:
     pass
 
+# Initialize OTEL instrumentation before importing LLM/HTTP-using modules.
+# The live game generates training-data rows via live_traces; tracing the
+# AI turns captures the same cost/eval/GPU signal as the synthetic harness.
+# No-op when GENAI_OTEL_DISABLE=1 or library is missing.
+from otel_bootstrap import init_otel  # noqa: E402
+init_otel(service_name="mind-of-tashi-live")
+
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles

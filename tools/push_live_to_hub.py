@@ -65,7 +65,7 @@ tags:
   - multi-turn
 size_categories:
   - n<1K
-pretty_name: Mind of Tashi — live gameplay traces
+pretty_name: The Mind of Tashi — live gameplay traces
 configs:
   - config_name: default
     default: true
@@ -76,7 +76,7 @@ configs:
           - "**/*.jsonl"
 ---
 
-# Mind of Tashi — live gameplay traces (private)
+# The Mind of Tashi — live gameplay traces (private)
 
 Every row in this dataset is **one complete match** between a real human
 player and the Mind of Tashi AI. Each row is a single multi-turn `messages`

@@ -1,6 +1,6 @@
 # `tools/` — self-play data harvest
 
-Pre-window playbook for the Mind of Tashi SFT dataset. The harness drives
+Pre-window playbook for The Mind of Tashi SFT dataset. The harness drives
 two `Teacher` instances against the engine, asymmetrically: the **player**
 side is a stand-in for the human user (move only, no `<think>` saved),
 the **opponent** side is the AI we'll fine-tune (full `<think>` + taunt

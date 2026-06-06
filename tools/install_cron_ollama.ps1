@@ -23,14 +23,15 @@ $action = New-ScheduledTaskAction `
     -Execute 'powershell.exe' `
     -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$harvestScript`""
 
-# Fire at 18:00 local -- 6 hours after the API-pool cron at 12:00. If 18:00
+# Fire at 15:00 local -- 3 hours after the API-pool cron at 12:00. If 15:00
 # has already passed today, first run is tomorrow.
-$startDt = (Get-Date).Date.AddHours(18)
+# (Was 18:00 until 2026-05-27; moved earlier to free evening compute headroom.)
+$startDt = (Get-Date).Date.AddHours(15)
 if ($startDt -lt (Get-Date)) {
     $startDt = $startDt.AddDays(1)
 }
 
-# 10 daily runs total. End-boundary 30 min after the 10th 18:00 trigger.
+# 10 daily runs total. End-boundary 30 min after the 10th 15:00 trigger.
 $endDt = $startDt.AddDays(9).AddMinutes(30)
 
 $trigger = New-ScheduledTaskTrigger -Daily -At $startDt

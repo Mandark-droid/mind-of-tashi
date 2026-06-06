@@ -109,6 +109,12 @@ try:
 except ImportError:
     pass
 
+# Initialize OTEL instrumentation BEFORE importing teachers so the auto-
+# instrumentors can patch openai/google-genai/aiohttp clients at import time.
+# No-op if GENAI_OTEL_DISABLE=1 or the library isn't installed.
+from otel_bootstrap import init_otel  # noqa: E402
+init_otel(service_name="mind-of-tashi-selfplay")
+
 from engine import MOVES, Fighter, RoundResult, apply, resolve  # noqa: E402
 from opponents import BY_ID, LADDER, Opponent  # noqa: E402
 from teachers import (  # noqa: E402
@@ -167,10 +173,26 @@ async def run_match(
         legal_o = _legal(fo.prana)
 
         # Blind commit, in parallel. Neither call sees the other's pending move.
-        result_p, result_o = await asyncio.gather(
-            player_teacher.choose(player_opp, state_p),
-            opponent_teacher.choose(opponent_opp, state_o),
-        )
+        # Hard per-round timeout: if one teacher's HTTP call hangs (no client-side
+        # timeout in the underlying SDK, or a network stall), we don't want the
+        # whole harvest to wedge. 240s covers a slow reasoning teacher with
+        # retries; anything longer is almost certainly hung and the match is
+        # better truncated than indefinitely waiting.
+        try:
+            result_p, result_o = await asyncio.wait_for(
+                asyncio.gather(
+                    player_teacher.choose(player_opp, state_p),
+                    opponent_teacher.choose(opponent_opp, state_o),
+                ),
+                timeout=240.0,
+            )
+        except asyncio.TimeoutError:
+            print(
+                f"[selfplay] round {rnd} timed out after 240s — truncating match "
+                f"{match_id} (player={player_opp.id}, opponent={opponent_opp.id})",
+                flush=True,
+            )
+            break
 
         hp_p_before, hp_o_before = fp.hp, fo.hp
         res = resolve(fp, fo, result_p.parsed["move"], result_o.parsed["move"])

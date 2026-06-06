@@ -139,7 +139,7 @@
     --header-h:58px;
     --left-w:210px;
     --right-w:195px;
-    --footer-h:130px;
+    --footer-h:168px;
   }
 
   /* old .wrap container is gone; layout sections sit as siblings */
@@ -387,7 +387,7 @@
     backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
     border-top:1px solid rgba(255,255,255,.06);
     padding:14px 28px 16px;
-    display:flex; align-items:center; justify-content:center;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
   }
   .footer-scroll .inner{
     max-width:920px; margin:0 auto; width:100%;
@@ -402,7 +402,7 @@
   .footer-scroll .hdr{display:flex; align-items:center; gap:8px; font-size:10.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--bone-dim)}
   .footer-scroll .hdr .dot{width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent)}
   .footer-scroll .think{font-family:"Eczar"; font-weight:500; font-size:15.5px; line-height:1.5; margin-top:5px; color:var(--bone); font-style:italic; min-height:1.4em}
-  .footer-scroll .taunt{margin-top:5px; font-size:13px; color:var(--accent); font-weight:500}
+  .footer-scroll .taunt{max-width:920px; width:100%; margin:0 auto; padding:0 18px; font-size:13.5px; color:var(--accent); font-weight:500; text-align:center}
   .footer-scroll .taunt::before{content:"\201C"} .footer-scroll .taunt::after{content:"\201D"}
   .footer-scroll .reading{color:var(--bone-dim); font-style:italic}
   .footer-scroll .reading::after{content:"\2026"; animation:blink 1.2s steps(4) infinite}
@@ -689,7 +689,7 @@
   <header class="topbar">
     <div class="brand-row">
       <span class="deva">॥ धुंध ॥</span>
-      <h1>THE MIST DUEL</h1>
+      <h1>THE MIND OF TASHI</h1>
       <div class="pips" id="pips"></div>
     </div>
     <div style="display:flex; align-items:center; gap:6px">
@@ -753,8 +753,9 @@
     <div class="inner">
       <div class="hdr"><span class="dot"></span><span id="scrollLabel">the mind of your opponent</span></div>
       <div class="think reading" id="think">awaiting the opening round.</div>
-      <div class="taunt" id="taunt" style="display:none"></div>
     </div>
+    <!-- taunt sits OUTSIDE .inner so it's never clipped by the mind-scroll's max-height -->
+    <div class="taunt" id="taunt" style="display:none"></div>
   </footer>
 
   <!-- Tweaks panel (background mood presets + density toggles) -->
@@ -811,8 +812,8 @@
     <div class="card" id="card">
       <div class="em" id="cardEm">⛰</div>
       <h2 id="cardTitle">The Mind of Tashi</h2>
-      <div class="sub" id="cardSub">a duel of foresight in the hidden Himalaya</div>
-      <div class="bio" id="cardBio">Five champions guard the path to the summit. Each round you both commit a move in secret — you cannot react, only read. Beat your read, climb the mountain.</div>
+      <div class="sub" id="cardSub">a duel of foresight in the Village Hidden in the Mist</div>
+      <div class="bio" id="cardBio">Ten champions guard the path to the summit. Each round you both commit a move in secret — you cannot react, only read. Beat your read, climb the mountain.</div>
 
       <!-- Identity block: shown on the very first card, hidden on subsequent
            between-fight cards. On the Space, an HF sign-in CTA appears here;
@@ -1045,6 +1046,37 @@
   const MOVES = Object.fromEntries(META.moves.map(m => [m.id, m]));
   const $ = id => document.getElementById(id);
 
+  // While the model is thinking, rotate through a small pool of phrases
+  // instead of holding a single static "reading your pattern" line. English +
+  // IAST code-switched, matches the bilingual <think> register. Per-persona
+  // overrides can extend this later (see IDEAS.md A6).
+  const READING_PHRASES = [
+    "reading your pattern",
+    "weighing the silence",
+    "counting your breaths",
+    "watching the mist move",
+    "tasting the air",
+    "hearing what you almost did",
+    "abhyāsa: studying your habit",
+    "dṛṣṭi: the gaze settles",
+    "prāṇa flows, then waits",
+    "the mountain listens",
+  ];
+  let readingTimer = null;
+  function startReadingRotation() {
+    stopReadingRotation();
+    const start = Math.floor(Math.random() * READING_PHRASES.length);
+    let tick = 0;
+    $("think").textContent = READING_PHRASES[start];
+    readingTimer = setInterval(() => {
+      tick += 1;
+      $("think").textContent = READING_PHRASES[(start + tick) % READING_PHRASES.length];
+    }, 1200);
+  }
+  function stopReadingRotation() {
+    if (readingTimer !== null) { clearInterval(readingTimer); readingTimer = null; }
+  }
+
   let state = null, ladderIndex = 0, busy = false;
   // match_id is minted server-side on round 1 of each fight and echoed back
   // in /ai_turn responses. We persist it on `state` so subsequent rounds
@@ -1204,7 +1236,8 @@
       setTimeout(() => justPicked && justPicked.classList.remove("just-picked"), 520);
     }
     $("taunt").style.display = "none";
-    $("think").className = "think reading"; $("think").textContent = "reading your pattern";
+    $("think").className = "think reading";
+    startReadingRotation();
     state.player_move = playerMove;
     let data;
     try {
@@ -1212,10 +1245,12 @@
       const res = await client.predict("/ai_turn", { state_json: JSON.stringify(state) });
       data = JSON.parse(res.data[0]);
     } catch (e) {
+      stopReadingRotation();
       $("think").className = "think";
       $("think").textContent = "The duel needs its backend. Run `python app.py` and open the served page.";
       busy = false; renderMoves(); return;
     }
+    stopReadingRotation();
     await reveal(playerMove, data);
     state.player_hp = data.player_hp; state.ai_hp = data.ai_hp;
     state.player_prana = data.player_prana; state.ai_prana = data.ai_prana;

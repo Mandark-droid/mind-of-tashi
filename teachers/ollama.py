@@ -1,11 +1,14 @@
-"""Local Ollama teacher — async HTTP client to 127.0.0.1:11434 (no SDK)."""
+"""Local Ollama teacher — uses the official `ollama` Python AsyncClient.
+
+We deliberately use the SDK (not raw aiohttp) so `genai-otel-instrument`'s
+built-in OllamaInstrumentor picks it up automatically and emits proper
+`gen_ai.*` spans with model / token-count / latency attributes — which the
+cost + eval enrichers then key off.
+"""
 
 from __future__ import annotations
-import asyncio
 import os
 from typing import Any, Dict, List, Optional
-
-import aiohttp
 
 import prompts
 from opponents import Opponent
@@ -25,20 +28,9 @@ DEFAULT_OLLAMA_PORT = 11434
 def _normalize_host(raw: str) -> str:
     """Coerce a possibly-misshapen OLLAMA_HOST into a valid client URL.
 
-    Ollama's documented `OLLAMA_HOST` env var is used by both the server
-    (to bind) and the CLI (to dial). Users frequently set it to
-    `0.0.0.0`, `0.0.0.0:11434`, or just `localhost` — none of which work
-    cleanly when handed to aiohttp:
-
-      * `0.0.0.0` is a server bind address, not a client dial address
-      * a host without scheme becomes a relative URL aiohttp rejects
-      * a URL without explicit port defaults to :80, where Ollama isn't
-
-    Rules applied in order:
-      1. prepend `http://` if no scheme present
-      2. rewrite `0.0.0.0` host part to `127.0.0.1`
-      3. append `:11434` if no port is specified on the authority
-      4. strip trailing slash
+    Same rules as before: prepend scheme, rewrite 0.0.0.0 → 127.0.0.1,
+    append :11434 if no port. The `ollama` Python client accepts the same
+    URL shape aiohttp did, so the existing normalization carries over.
     """
     s = (raw or "").strip()
     if not s:
@@ -46,87 +38,73 @@ def _normalize_host(raw: str) -> str:
     if "://" not in s:
         s = "http://" + s
     scheme, _, rest = s.partition("://")
-    # split rest into authority (host[:port]) and the remaining path/query
     if "/" in rest:
-        authority, slash, tail = rest.partition("/")
+        authority, _, tail = rest.partition("/")
         tail = "/" + tail
     else:
         authority, tail = rest, ""
     if authority.startswith("0.0.0.0"):
         authority = authority.replace("0.0.0.0", "127.0.0.1", 1)
-    if ":" not in authority:  # no port — assume Ollama default
+    if ":" not in authority:
         authority = f"{authority}:{DEFAULT_OLLAMA_PORT}"
     return f"{scheme}://{authority}{tail}".rstrip("/")
 
 
 class OllamaTeacher(Teacher):
     name = "ollama"
-    # Ollama's cold-load of a fresh model (especially after a swap on a
-    # tight-VRAM machine) can easily eat 60-120s before any tokens land. The
-    # 4-retry exponential backoff inherited from Teacher base would then
-    # burn 15s of fruitless sleeping on a doomed local call. Override:
+    # See aiohttp version's note: cold-load + retry burn doesn't pay back here.
     max_retries = 1
 
     def __init__(self, model: str, host: Optional[str] = None) -> None:
+        # Lazy import so `mock`/`gemini`-only runs don't pay for ollama install.
+        from ollama import AsyncClient  # type: ignore
+
         self.model = model
         raw_host = host or os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
         self.host = _normalize_host(raw_host)
-        self._session: Optional[aiohttp.ClientSession] = None
-
-    def _ensure_session(self) -> aiohttp.ClientSession:
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
-        return self._session
+        # 600s timeout matches the previous aiohttp value — covers cold model
+        # loads (qwen3:4b ~100s first call) and long reasoning generations.
+        self._client = AsyncClient(host=self.host, timeout=600)
 
     async def aclose(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
-            self._session = None
+        # ollama.AsyncClient owns an httpx.AsyncClient under the hood; expose
+        # its close for clean shutdown.
+        try:
+            inner = getattr(self._client, "_client", None)
+            if inner is not None and hasattr(inner, "aclose"):
+                await inner.aclose()
+        except Exception:
+            pass
 
     async def _choose_async(
         self, opp: Opponent, state: Dict[str, Any], legal: List[str]
     ) -> ChoiceResult:
         messages = build_messages(opp, state)
-        body = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False,
-            "options": {
-                "temperature": temperature_for(opp),
-                "top_p": 0.9,
-                "num_predict": opp.think_tokens + 80,
-            },
-        }
-        session = self._ensure_session()
         try:
-            async with session.post(
-                f"{self.host.rstrip('/')}/api/chat",
-                json=body,
-                # 600s = 10 min — covers cold model loads (qwen3:4b takes
-                # ~100s to load on first call) AND long reasoning generations
-                # (qwen3's default `think:true` can emit 2k+ thinking tokens
-                # before the visible answer).
-                timeout=aiohttp.ClientTimeout(total=600),
-            ) as resp:
-                if resp.status in (429, 502, 503, 504):
-                    raise RetryableError(f"ollama HTTP {resp.status}")
-                if resp.status >= 400:
-                    text = await resp.text()
-                    raise RuntimeError(f"ollama HTTP {resp.status}: {text[:200]}")
-                data = await resp.json()
-        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            resp = await self._client.chat(
+                model=self.model,
+                messages=messages,
+                stream=False,
+                options={
+                    "temperature": temperature_for(opp),
+                    "top_p": 0.9,
+                    "num_predict": opp.think_tokens + 80,
+                },
+            )
+        except Exception as exc:
+            # The ollama SDK raises ResponseError for HTTP failures and
+            # httpx.ConnectError / TimeoutException for transport issues.
+            # Treat all of them as retryable so the harness backs off.
             raise RetryableError(f"ollama client error: {exc}") from exc
 
-        # Ollama returns model output in two fields when the underlying model
-        # has reasoning support (qwen3 etc.): `message.thinking` for the
-        # hidden chain-of-thought, `message.content` for the visible answer.
-        # Our prompt asks the model to put its reasoning inside <think>...
-        # </think> in the VISIBLE output — but qwen3 often hides it in
-        # `thinking` instead. Concatenate them so parse_reply sees a single
-        # <think>...</think>\n{json} blob no matter which mode the model used.
+        # Response is a Pydantic model on ollama>=0.4. `model_dump` handles
+        # both that and the older dict-style return.
+        data = resp.model_dump() if hasattr(resp, "model_dump") else dict(resp)
         msg = data.get("message") or {}
         content = msg.get("content") or ""
         thinking = msg.get("thinking") or ""
+        # qwen3 et al. surface reasoning under `message.thinking`. Stitch
+        # into <think>…</think>{json} so prompts.parse_reply finds it.
         if thinking and "<think>" not in content:
             raw = f"<think>{thinking.strip()}</think>\n{content.lstrip()}"
         else:

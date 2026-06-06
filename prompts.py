@@ -25,7 +25,7 @@ MOVE_REFERENCE = "\n".join(
 
 
 def build_system(opp: Opponent) -> str:
-    return f"""You are {opp.name}, {opp.title} — a duelist of the mist-hidden village high in the Himalaya.
+    return f"""You are {opp.name}, {opp.title} — a duelist of the Village Hidden in the Mist, high in the Himalayas.
 
 WHO YOU ARE
 {opp.temperament}
