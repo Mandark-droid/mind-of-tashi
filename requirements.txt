@@ -15,3 +15,12 @@ fastapi>=0.115
 # built-in mock opponent, so it always runs.
 llama-cpp-python>=0.3.0
 huggingface_hub>=0.27.0
+
+# --- self-play / training data harvest (dev-only, not used by the live game) -
+# These are imported by tools/selfplay.py only. Kept here (not in a separate
+# requirements-dev.txt) because a single `pip install -r requirements.txt` is
+# the project's documented install path. On Spaces these still install but
+# nothing imports them at request time.
+aiohttp>=3.9
+python-dotenv>=1.0
+google-genai>=0.3

@@ -16,10 +16,11 @@ The web layer does not know or care which backend is live.
 """
 
 from __future__ import annotations
+import json
 import os
 import random
 from collections import Counter
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import prompts
 from engine import MOVES, ATTACKS
@@ -57,12 +58,20 @@ class Reasoner:
 
     # --------------------------------------------------------------------- #
     def choose(self, opp: Opponent, state: Dict) -> Dict:
+        parsed, _raw = self.choose_with_raw(opp, state)
+        return parsed
+
+    def choose_with_raw(self, opp: Opponent, state: Dict) -> Tuple[Dict, str]:
+        """Like choose() but also returns the raw model completion text.
+
+        Self-play data collection wants the full <think>...</think>{json} string
+        (that's the SFT target). For the mock backend we synthesise an
+        equivalent raw string so downstream code can be agnostic.
+        """
         legal = [m for m in MOVES if state["ai_prana"] >= MOVES[m]["cost"]]
         if self.llm is None:
-            return _mock_choose(opp, state, legal)
-        return self._llm_choose(opp, state, legal)
-
-    def _llm_choose(self, opp: Opponent, state: Dict, legal: List[str]) -> Dict:
+            parsed = _mock_choose(opp, state, legal)
+            return parsed, _synthesize_raw(parsed)
         messages = [
             {"role": "system", "content": prompts.build_system(opp)},
             {"role": "user", "content": prompts.build_user(opp, state, legal)},
@@ -73,8 +82,18 @@ class Reasoner:
             temperature=0.7 + 0.05 * (5 - opp.difficulty),  # brawlers run hotter
             top_p=0.9,
         )
-        text = out["choices"][0]["message"]["content"]
-        return prompts.parse_reply(text, legal)
+        raw = out["choices"][0]["message"]["content"]
+        return prompts.parse_reply(raw, legal), raw
+
+
+def _synthesize_raw(parsed: Dict) -> str:
+    """Format a mock-backend choice as if it had come from the model.
+
+    Lets the self-play harness treat both backends uniformly when writing the
+    `raw_completion` field of its JSONL output.
+    """
+    obj = {"move": parsed["move"], "taunt": parsed["taunt"]}
+    return f"<think>{parsed['reasoning']}</think>\n{json.dumps(obj, ensure_ascii=False)}"
 
 
 # ------------------------------------------------------------------------- #
@@ -108,6 +127,16 @@ def _persona_bias(opp: Opponent, predicted: str, state: Dict, legal: List[str]) 
         pool = (["STRIKE"] * 5) + (["ART"] if prana >= MOVES["ART"]["cost"] else []) + ["GRAPPLE"]
         return random.choice(pool)
 
+    if opp.id == "lhamo":  # bridge-walker: tempo-reader, picks the moment
+        last = state["history"][-1]["player_move"] if state["history"] else None
+        if last in ("FOCUS", "ART") and "STRIKE" in legal:
+            return "STRIKE"  # post-commit window
+        if prana < 2:
+            return random.choice(["GUARD", "FOCUS"])
+        if prana >= MOVES["ART"]["cost"] and predicted == "FOCUS" and "ART" in legal:
+            return "ART"
+        return _first_legal(["GUARD", "FOCUS"], legal, default="GUARD")
+
     if opp.id == "norbu":  # patient counter-puncher
         last = state["history"][-1]["player_move"] if state["history"] else None
         if last == "FOCUS" and "STRIKE" in legal:
@@ -116,10 +145,23 @@ def _persona_bias(opp: Opponent, predicted: str, state: Dict, legal: List[str]) 
             return random.choice(["GUARD", "FOCUS"])
         return _first_legal(_COUNTER[predicted], legal, default="GUARD")
 
+    if opp.id == "yeshi":  # mirror-ice: reflects last player move back as a counter
+        last = state["history"][-1]["player_move"] if state["history"] else None
+        if last is None:
+            return _first_legal(["MIST_STEP", "GUARD"], legal, default="GUARD")
+        return _first_legal(_COUNTER.get(last, []), legal, default="GUARD")
+
     if opp.id == "pema":  # read-merchant, loves the bet
         if random.random() < 0.25 and "GUARD" in legal:
             return "GUARD"  # feint to bait an attack
         return _first_legal(_COUNTER[predicted], legal, default="MIST_STEP")
+
+    if opp.id == "karma":  # glacier-heart: bank prana, then unleash ART
+        if prana < 4:
+            return random.choice(["FOCUS", "GUARD", "FOCUS"])  # bank, bank, bank
+        if "ART" in legal and predicted != "MIST_STEP":
+            return "ART"
+        return _first_legal(_COUNTER[predicted], legal, default="GUARD")
 
     if opp.id == "drogpa":  # prana tyrant
         if prana >= MOVES["ART"]["cost"] and predicted != "MIST_STEP":
@@ -127,6 +169,20 @@ def _persona_bias(opp: Opponent, predicted: str, state: Dict, legal: List[str]) 
         if prana < MOVES["ART"]["cost"]:
             return random.choice(["GUARD", "FOCUS"])
         return _first_legal(_COUNTER[predicted], legal, default="GUARD")
+
+    if opp.id == "tenzin":  # storm-voice: deliberately unpredictable
+        # uniform-ish over legal, slight bias toward high-variance plays
+        weighted = list(legal)
+        for hv in ("ART", "MIST_STEP"):
+            if hv in legal:
+                weighted.append(hv)  # small bias
+        return random.choice(weighted)
+
+    if opp.id == "the-veiled-one":  # transcendent: two layers deep, balanced
+        # 30% layer-2 mixup, otherwise hard counter; balanced move use
+        if random.random() < 0.3:
+            return _first_legal(_COUNTER.get(predicted, []), legal, default="FOCUS")
+        return _first_legal(_COUNTER[predicted], legal, default="MIST_STEP")
 
     # the-mountain: near-perfect counter, occasional layer-2 mixup
     if random.random() < 0.2:
@@ -144,18 +200,28 @@ def _first_legal(prefs: List[str], legal: List[str], default: str) -> str:
 
 _REASONING = {
     "tashi": "They'll {pred_verb}? Doesn't matter. I hit harder and I hit now.",
+    "lhamo": "The wind on the ropes... they will {pred_verb}. Not yet. Now. {move_label}.",
     "norbu": "They have shown {pred}. Haste is a debt; let them pay it. I answer with {move_label}.",
+    "yeshi": "They showed {pred}. The lake returns what it is shown — {move_label}, sharpened.",
     "pema": "Oh, I know you. You're going to {pred_verb} — you always do. So I'll {move_label} and watch you fall for it.",
+    "karma": "The ice has not finished forming. {move_label}. A glacier does not hurry to break.",
     "drogpa": "The storm is not ready... / or it is. {move_label}. Stone does not hurry.",
+    "tenzin": "The wind turns. They expect {pred}? Let it be {move_label} instead. Ha!",
     "the-mountain": "Your pattern leans toward {pred}. You expect me to counter it — so I weigh whether you have already changed. {move_label}.",
+    "the-veiled-one": "I have already seen you choose {pred}. I have already chosen {move_label}. The duel is a memory.",
 }
 
 _TAUNT = {
     "tashi": ["Too slow!", "Is that all the leaf has?", "Sit down."],
+    "lhamo": ["The moment was now.", "You stepped too early.", "The bridge holds. You do not."],
     "norbu": ["Again.", "You are louder than you are skilled.", "Breathe. It is your last lesson."],
+    "yeshi": ["The lake returns it.", "I am only what you brought.", "Look at yourself."],
     "pema": ["Predictable little thing.", "I wrote this ending already.", "Dance for me."],
+    "karma": ["Slowly.", "The ice has formed.", "Centuries learn this. You have minutes."],
     "drogpa": ["...", "Avalanche.", "You should not have come up the mountain."],
+    "tenzin": ["Ha!", "The wind turns.", "Listen for the next one. You won't hear it."],
     "the-mountain": ["I have already seen this duel.", "Notice yet?", "Come. The summit waits."],
+    "the-veiled-one": ["It is already done.", "You arrived where I waited.", "The veil parts only one way."],
 }
 
 _PRED_VERB = {

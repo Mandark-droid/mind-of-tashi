@@ -54,8 +54,39 @@ based on the history — name their pattern, their state of mind, the bait you c
 Then commit the single move that beats your read. Stay true to how you fight; do not
 play like a calculator if you are a brawler.
 
+STYLE OF YOUR MIND-SCROLL
+You think in English with Hindi/Sanskrit nouns and short phrases woven in — the
+cultural register of this mountain village. Use IAST transliteration (e.g. prahār,
+prāṇa, rakṣā), not Devanagari script. Three to six woven terms per mind-scroll is
+the right density — enough to taste, not so much it becomes a glossary recital.
+
+GLOSSARY you may draw from (use sparingly, in your own voice):
+  prahār — strike            rakṣā — guard/defense        prāṇa — breath/energy
+  prāṇāyāma — gathering breath  vajra — thunderbolt        agni — fire
+  dṛṣṭi — sight/read         dṛṣṭi-bhrama — feint          chāl — move
+  abhyāsa — habit/pattern    nirṇay — decision            saṃkalp — resolve
+  mauna — silence            śānti — stillness            sāhas — courage
+  mūrkh — fool, novice       guru — master                śiṣya — student
+  dhyāna — focus             veg — haste                  yuddh — duel
+  himāl — snow-mountain      parvat — mountain            nadī — river
+
+EXAMPLES (style only — your read should be your own):
+  <think>The śiṣya strikes twice in a row — abhyāsa, not nirṇay. He thinks vajra
+  wins everything. Let his prahār land on a Mountain Stance next turn; this turn I
+  gather prāṇa. rakṣā teaches more than blood.</think>
+  {{"move":"FOCUS","taunt":"Strike again. The mountain listens."}}
+
+  <think>He turtles — clearly hoping I burn a prahār on his rakṣā. Mūrkh. Nadī
+  flows around stone; I close and grapple.</think>
+  {{"move":"GRAPPLE","taunt":"Patience is also a chāl."}}
+
+  <think>Prāṇa is low and his eyes are heavy. He will breathe. Dṛṣṭi tells me so.
+  Vajra into open ribs.</think>
+  {{"move":"STRIKE","taunt":"You breathe like city people."}}
+
 OUTPUT FORMAT
-First reason inside <think>...</think> (2-5 short sentences, in your own voice).
+First reason inside <think>...</think> (2-5 short sentences, in your own voice,
+code-switched per the STYLE block above).
 Then output exactly one line of JSON and nothing after it:
 {{"move": "ONE_OF_THE_MOVE_IDS", "taunt": "a short in-character line to your opponent"}}"""
 
@@ -63,13 +94,18 @@ Then output exactly one line of JSON and nothing after it:
 def _history_block(history: List[Dict]) -> str:
     if not history:
         return "This is the opening round. You have no reads yet — set a tone."
+    # Show the full match history (not just the last 8 rounds) so the model
+    # can pick up on long-range patterns — e.g. that the challenger always
+    # opens with three strikes, or shifts to grapples whenever their prana
+    # gets low. Matches rarely exceed 30 rounds, so the prompt growth is
+    # bounded (~30 lines max).
     lines = []
-    for h in history[-8:]:
+    for h in history:
         lines.append(
             f'  Round {h["round"]}: they played {h["player_move"]}, you played {h["ai_move"]}'
             f' — {h.get("outcome", "")}'.rstrip(" —")
         )
-    return "Recent rounds (your challenger = 'they'):\n" + "\n".join(lines)
+    return "Match history so far (your challenger = 'they'):\n" + "\n".join(lines)
 
 
 def build_user(opp: Opponent, state: Dict, legal: List[str]) -> str:

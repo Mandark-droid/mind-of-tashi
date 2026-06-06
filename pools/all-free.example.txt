@@ -1,0 +1,40 @@
+# Self-play teacher pool — STATIC TEMPLATE.
+#
+# Preferred: auto-generate `pools/all-free.txt` (gitignored) by running
+#     python -m tools.list_openrouter_free --write pools/all-free.txt
+# from mind-of-tashi/. That queries OpenRouter's catalog with your
+# OPENROUTER_API_KEY and lists every currently-free text-output model. The
+# free-model list changes frequently — re-run the fetcher whenever you start
+# a new harvest day.
+#
+# This template lives in git as a fallback for when no API key is available.
+#
+# Per-spec daily limits (see teachers/quota.py): gemini=50, openrouter=200,
+# mistral=100, sarvam=100. Override via custom_limits in code if you know yours.
+#
+# Lines starting with '#' are comments. Blank lines are ignored.
+
+# --- Google Gemini (each model id is its own 50/day bucket) -----------------
+gemini:gemini-2.5-flash
+gemini:gemini-2.5-flash-lite
+gemini:gemini-2.5-pro
+gemini:gemini-3.0-flash
+gemini:gemini-3.0-flash-lite
+# gemini:gemini-3.5-flash      # uncomment if available on your account
+
+# --- Mistral free tier ------------------------------------------------------
+mistral:mistral-small-latest
+mistral:mistral-large-latest
+
+# --- Sarvam (Indian-language native — strongest Hindi/Sanskrit fidelity) ----
+sarvam:sarvam-m
+
+# --- OpenRouter free models (placeholder; prefer the auto-fetched list) -----
+openrouter:meta-llama/llama-3.3-70b-instruct:free
+openrouter:deepseek/deepseek-v4-flash:free
+openrouter:google/gemma-4-26b-a4b-it:free
+openrouter:qwen/qwen3-next-80b-a3b-instruct:free
+openrouter:nousresearch/hermes-3-llama-3.1-405b:free
+openrouter:openai/gpt-oss-120b:free
+openrouter:nvidia/nemotron-3-super-120b-a12b:free
+openrouter:z-ai/glm-4.5-air:free

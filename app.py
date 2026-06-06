@@ -16,6 +16,17 @@ from __future__ import annotations
 import json
 import os
 
+# Load .env BEFORE importing modules that read env at import time
+# (live_traces and leaderboard both capture their config at module load).
+# On a real Space, env vars come from Spaces Secrets/Variables and python-dotenv
+# is a no-op; locally it makes the live game pick up HF_TOKEN, LEADERBOARD_REPO,
+# LIVE_TRACES_REPO etc. without needing them exported in the parent shell.
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except ImportError:
+    pass
+
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,7 +34,9 @@ from gradio import Server
 
 import engine
 import leaderboard
+import live_traces
 import opponents
+import selfplay_live
 from llm import Reasoner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -61,26 +74,61 @@ def _meta() -> dict:
              "accent": o.accent, "glyph": o.glyph, "difficulty": o.difficulty}
             for o in opponents.LADDER
         ],
+        # When SELFPLAY_MODE=1 this exposes the two teacher specs so the UI
+        # can show a "Watch self-play" button and auto-drive both sides.
+        "selfplay": selfplay_live.status(),
     }
 
 
 @app.api(name="ai_turn")
-def ai_turn(state_json: str) -> str:
-    """One simultaneous exchange. Input/output are JSON strings for safe marshalling."""
+async def ai_turn(state_json: str) -> str:
+    """One simultaneous exchange. Input/output are JSON strings for safe marshalling.
+
+    Two opponent backends:
+      - normal: llm.Reasoner (llama.cpp / mock) — what the deployed Space uses
+      - self-play (SELFPLAY_MODE=1): selfplay_live's opponent_teacher (typically
+        an Ollama model), so both sides of the duel are LLMs and the human is
+        just watching.
+    """
     state = json.loads(state_json)
     opp = opponents.get(state["opponent_id"])
+
+    # Session continuity for live-trace capture: the front-end echoes back
+    # whatever match_id we minted on round 1. First contact (round == 1 or
+    # missing) mints a fresh one. End-of-session flush happens in /submit_run.
+    match_id = state.get("match_id")
+    if not match_id or state.get("round") == 1:
+        match_id = live_traces.new_match_id()
 
     player = engine.Fighter("you", hp=state["player_hp"], prana=state["player_prana"])
     ai = engine.Fighter(opp.name, hp=state["ai_hp"], prana=state["ai_prana"])
 
     player_move = str(state.get("player_move", "FOCUS")).upper()
 
-    # The model commits BLIND — choose() only ever reads `history`, never player_move.
-    decision = reasoner.choose(opp, state)
+    # The opponent commits BLIND — it sees `history` only, never player_move.
+    if selfplay_live.SELFPLAY_MODE:
+        result_obj = await selfplay_live.opponent_choose(state, opp)
+        decision, raw = result_obj.parsed, result_obj.raw
+    else:
+        decision, raw = reasoner.choose_with_raw(opp, state)
     ai_move = decision["move"]
 
     result = engine.resolve(player, ai, player_move, ai_move)
     engine.apply(player, ai, result)
+
+    # Capture the AI turn into the per-match JSONL (best-effort; never fails
+    # the request). The match-end summary is written in /submit_run. We
+    # explicitly DO NOT capture in self-play mode — those rows would mix
+    # two-AI play into the real-player dataset.
+    if not selfplay_live.SELFPLAY_MODE:
+        try:
+            live_traces.capture_turn(
+                match_id=match_id, opp=opp, state=state,
+                ai_raw=raw, ai_parsed=decision,
+                player_move=player_move, backend=reasoner.backend,
+            )
+        except Exception as exc:  # never let capture failures break the game
+            print(f"[live_traces] capture_turn failed: {exc}")
 
     # compact outcome line for the running history / future reads
     outcome = _outcome_phrase(result, player_move, ai_move)
@@ -121,6 +169,10 @@ def ai_turn(state_json: str) -> str:
         "status": status,
         "next_opponent": next_opponent,
         "history": history,
+        # The front-end persists this in its run state and echoes it back on
+        # the next /ai_turn call (or to /submit_run on game end) so every
+        # turn of a match shares one live-traces file.
+        "match_id": match_id,
     })
 
 
@@ -193,7 +245,56 @@ async def submit_run(request: Request):
         won=bool(body.get("won", False)),
         backend=reasoner.backend,
     )
+
+    # Seal the live-traces file for the just-finished match. Best-effort —
+    # cron uploads any sealed (match_end-marked) files to the live dataset.
+    match_id = body.get("match_id")
+    if match_id:
+        try:
+            live_traces.end_session(
+                match_id=str(match_id),
+                outcome=str(body.get("outcome") or ("ladder_clear" if body.get("won") else "defeat")),
+                won=bool(body.get("won", False)),
+                total_turns=int(body.get("total_turns", 0)) or None,
+                total_seconds=float(body.get("total_seconds", 0)) or None,
+                username=username,
+            )
+        except Exception as exc:
+            print(f"[live_traces] end_session failed: {exc}")
+
     return res
+
+
+@app.get("/live_traces_status")
+async def live_traces_status():
+    return live_traces.status()
+
+
+@app.api(name="player_turn")
+async def player_turn(state_json: str) -> str:
+    """Self-play only: ask the PLAYER teacher for its blind-commit move.
+
+    The front-end calls this in self-play mode BEFORE /ai_turn each round —
+    it gets the player teacher's chosen move (and reasoning), then submits
+    that move through the normal /ai_turn path so the resolution + opponent
+    side go through the same code as a human-driven game.
+
+    Returns: {"move", "reasoning", "taunt"} or {"error": "..."}.
+    """
+    if not selfplay_live.SELFPLAY_MODE:
+        return json.dumps({"error": "self-play disabled (set SELFPLAY_MODE=1)"})
+    try:
+        state = json.loads(state_json)
+        opp = opponents.get(state["opponent_id"])
+        result = await selfplay_live.player_choose(state, opp)
+        return json.dumps({
+            "move": result.parsed["move"],
+            "reasoning": result.parsed["reasoning"],
+            "taunt": result.parsed["taunt"],
+        })
+    except Exception as exc:
+        print(f"[selfplay] player_turn failed: {exc}")
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
 
 @app.get("/top_runs")

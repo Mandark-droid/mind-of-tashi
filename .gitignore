@@ -7,3 +7,25 @@ models/
 .DS_Store
 .idea/
 .vscode/
+
+# secrets and local config
+.env
+.env.*
+!.env.example
+
+# generated self-play / training artifacts (these paths live at the repo
+# root via ../data/ when running from mind-of-tashi/; rules duplicated here
+# for safety). JSONL outputs ARE tracked; state + logs are NOT.
+data/selfplay/.quota*
+data/selfplay/.tmp*
+data/selfplay/cron.log
+data/grpo/
+
+# scratch
+tmp/
+*.log
+
+# pool files contain the curated daily-rotation specs the user maintains
+# locally; only the .example template is committed.
+pools/*.txt
+!pools/*.example.txt

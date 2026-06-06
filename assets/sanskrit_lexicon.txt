@@ -1,0 +1,54 @@
+# Bilingual mind-scroll lexicon — IAST transliteration + Devanagari + English gloss.
+#
+# Used in two places:
+#   1. As an inline glossary inside prompts.build_system (so the teacher / SFT /
+#      GRPO model has high-frequency Hindi/Sanskrit terms at hand when emitting
+#      <think> blocks).
+#   2. As a regex/lexicon source for the self-play quality filter — rounds whose
+#      <think> contains zero hits against this file are flagged as English-only
+#      drift and dropped.
+#
+# Format: <iast>\t<devanagari>\t<english_gloss>\t<notes>
+# Comments start with '#'. Empty lines are ignored.
+#
+# Keep this small (~30 terms). The model should *taste* the register, not recite
+# a dictionary. 3-6 woven terms per mind-scroll is the target density.
+
+# --- combat verbs and nouns --------------------------------------------------
+prahār	प्रहार	strike/blow	general attack verb
+rakṣā	रक्षा	defense/guard	Mountain Stance
+prāṇa	प्राण	breath/life-energy	the resource
+prāṇāyāma	प्राणायाम	gathering breath	Draw Breath
+vajra	वज्र	thunderbolt	Vajra Strike
+agni	अग्नि	fire	Prana Art flavour
+vāyu	वायु	wind/breath	can also mean prana
+nadī	नदी	river	River Throw flavour
+parvat	पर्वत	mountain	Mountain Stance flavour
+patthar	पत्थर	stone	Hindi; immovable
+
+# --- reading the opponent ----------------------------------------------------
+dṛṣṭi	दृष्टि	sight/read	sensing the move
+dṛṣṭi-bhrama	दृष्टि-भ्रम	illusion/feint	Mist-Step
+chāl	चाल	move	Hindi; chess sense
+abhyāsa	अभ्यास	practice/habit	the opponent's pattern
+nirṇay	निर्णय	decision	a committed choice
+saṃkalp	संकल्प	resolve	a settled intent
+
+# --- temperament and voice ---------------------------------------------------
+mauna	मौन	silence	stillness
+śānti	शान्ति	peace/stillness	calm before a strike
+sāhas	साहस	courage
+nirbhay	निर्भय	fearless
+veg	वेग	speed/haste	weakness in young fighters
+mūrkh	मूर्ख	fool/novice
+guru	गुरु	master/teacher
+śiṣya	शिष्य	student
+chela	चेला	disciple	Hindi
+dhyāna	ध्यान	focus/meditation
+kausal	कौशल	skill
+
+# --- the duel itself ---------------------------------------------------------
+yuddh	युद्ध	battle/duel
+saṅgharṣ	संघर्ष	struggle/clash
+himāl	हिमाल	snow/snowy mountain
+āśrama	आश्रम	hermitage	the arena

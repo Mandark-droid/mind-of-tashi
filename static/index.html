@@ -134,57 +134,355 @@
   .vignette{position:fixed; inset:0; z-index:1; pointer-events:none;
     background:radial-gradient(130% 90% at 50% 55%, transparent 45%, rgba(0,0,0,.55) 100%);}
 
-  .wrap{position:relative; z-index:2; max-width:960px; margin:0 auto; padding:22px 18px 40px}
+  /* ==== LAYOUT — header + two rails + footer scroll =================== */
+  :root{
+    --header-h:58px;
+    --left-w:210px;
+    --right-w:195px;
+    --footer-h:130px;
+  }
 
-  /* header */
-  header{display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:18px}
-  .brand{display:flex; flex-direction:column; line-height:1}
-  .brand .deva{font-family:"Eczar"; font-weight:600; color:var(--ember); font-size:13px; letter-spacing:.18em; opacity:.85}
-  .brand h1{font-family:"Eczar"; font-weight:700; font-size:26px; margin:.18em 0 0;
-    letter-spacing:.02em; background:linear-gradient(180deg,#fff,#cdbf9f); -webkit-background-clip:text; background-clip:text; color:transparent}
-  .brand .tag{font-size:12.5px; color:var(--bone-dim); letter-spacing:.04em; margin-top:.3em}
-  .pips{display:flex; gap:7px; align-items:center}
-  .pip{width:11px; height:18px; border-radius:2px; background:var(--line); position:relative; opacity:.4; transition:.4s}
-  .pip.on{opacity:1; box-shadow:0 0 10px currentColor}
+  /* old .wrap container is gone; layout sections sit as siblings */
+  .wrap{display:contents}
+
+  /* prayer flags only span the central duel band */
+  @media (min-width:900px){
+    .flags{ left:calc(var(--left-w) + 24px); right:calc(var(--right-w) + 24px); top:calc(var(--header-h) + 8px); }
+  }
+
+  /* ---- HEADER ------------------------------------------------------ */
+  .topbar{
+    position:fixed; top:0; left:0; right:0; height:var(--header-h); z-index:9;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 22px;
+    background:linear-gradient(180deg, rgba(8,12,18,.78) 0%, rgba(8,12,18,.35) 70%, transparent 100%);
+    backdrop-filter:blur(14px) saturate(1.05); -webkit-backdrop-filter:blur(14px) saturate(1.05);
+    border-bottom:1px solid rgba(255,255,255,.05);
+    pointer-events:none;
+  }
+  .topbar > *{pointer-events:auto}
+  .topbar .brand-row{display:flex; align-items:center; gap:18px; min-width:0}
+  .topbar .deva{font-family:"Eczar"; font-weight:600; color:var(--ember); font-size:11px; letter-spacing:.22em}
+  .topbar h1{
+    font-family:"Eczar"; font-weight:700; font-size:20px; letter-spacing:.08em; margin:0;
+    background:linear-gradient(180deg,#fff,#cdbf9f); -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 2px 14px rgba(0,0,0,.4); white-space:nowrap;
+  }
+  .topbar .pips{display:flex; gap:6px; align-items:center; margin-left:8px}
+  .pip{width:10px; height:16px; border-radius:2px; background:rgba(255,255,255,.18); opacity:.45; transition:.4s}
+  .pip.on{opacity:1; box-shadow:0 0 10px currentColor; background:currentColor}
   .pip:nth-child(1){color:var(--flag-1)} .pip:nth-child(2){color:var(--flag-2)}
   .pip:nth-child(3){color:var(--flag-3)} .pip:nth-child(4){color:var(--flag-4)} .pip:nth-child(5){color:var(--flag-5)}
-  .pip.on{background:currentColor}
-  .backend{font-size:10.5px; color:var(--bone-dim); letter-spacing:.08em; text-transform:uppercase; margin-top:6px; text-align:right; opacity:.7}
+  .topbar .backend{font-size:10px; color:var(--bone-dim); letter-spacing:.1em; text-transform:uppercase; opacity:.7}
 
-  /* battle stage */
-  .stage{
-    position:relative; height:240px; margin:0 0 12px;
-    border:1px solid var(--line); border-radius:var(--r);
-    background:
-      linear-gradient(180deg, rgba(40,55,72,.55), rgba(10,15,20,.85)),
-      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 240'><path fill='%23101820' opacity='.7' d='M0,200 L80,150 L160,180 L240,130 L320,170 L400,120 L480,160 L560,140 L600,170 L600,240 L0,240 Z'/><path fill='%230a1218' d='M0,220 L60,200 L140,215 L220,195 L300,210 L380,190 L460,210 L540,200 L600,215 L600,240 L0,240 Z'/></svg>") bottom/cover no-repeat;
-    overflow:hidden; box-shadow:var(--shadow);
+  /* ---- HP CORNER CARDS (under header, anchored to duel area corners) - */
+  .hp-corner{
+    position:fixed; top:calc(var(--header-h) + 14px); width:clamp(150px, 17vw, 260px); z-index:6;
+    background:linear-gradient(180deg, rgba(14,20,28,.78), rgba(8,12,18,.62));
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border:1px solid var(--line); border-radius:10px;
+    padding:9px 13px 11px;
+    box-shadow:0 14px 34px -16px rgba(0,0,0,.6);
   }
-  .stage .ground{
-    position:absolute; left:0; right:0; bottom:0; height:30px;
-    background:linear-gradient(180deg, transparent, rgba(0,0,0,.6));
-    border-top:1px dashed rgba(207,232,240,.08);
-  }
-  .stage .lantern{
-    position:absolute; top:14px; width:8px; height:14px; border-radius:50%/40%;
-    background:radial-gradient(circle at 50% 35%, var(--ember-2), var(--ember) 60%, #5a3208);
-    box-shadow:0 0 18px var(--ember), 0 0 6px var(--ember-2);
-    animation:sway 5s ease-in-out infinite alternate;
-  }
-  .stage .lantern.l1{left:14%} .stage .lantern.l2{left:50%; top:8px}
-  .stage .lantern.l3{right:14%; animation-delay:-2s}
-  @keyframes sway{from{transform:translateX(-3px)}to{transform:translateX(3px)}}
+  /* on narrow screens, drop the subtitle so the name + bar fit cleanly */
+  @media (max-width:1180px){ .hp-corner .ti{display:none} }
+  .hp-corner.player{left:calc(var(--left-w) + 14px); border-left:3px solid var(--ember)}
+  .hp-corner.opp   {right:calc(var(--right-w) + 14px); border-right:3px solid var(--accent); text-align:right}
+  .hp-corner .who{display:flex; align-items:baseline; justify-content:space-between; gap:10px}
+  .hp-corner.opp .who{flex-direction:row-reverse}
+  .hp-corner .nm{font-family:"Eczar"; font-size:16px; font-weight:600; line-height:1; min-width:0; flex-shrink:0}
+  .hp-corner .ti{font-size:10.5px; color:var(--bone-dim); letter-spacing:.03em; min-width:0; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .hp-corner .bar{height:10px; border-radius:5px; background:#0c1218; border:1px solid var(--line); overflow:hidden; position:relative; margin-top:8px}
+  .hp-corner .bar > i{display:block; height:100%; border-radius:5px; transition:width .6s cubic-bezier(.2,.8,.2,1)}
+  .hp-corner .hp > i{background:linear-gradient(90deg,#7a2b25,var(--crimson))}
+  /* opp HP fills from RIGHT → anchor the inner bar to the right edge so
+     the empty space appears on the LEFT as they take damage (mirrored) */
+  .hp-corner.opp .bar > i{position:absolute; right:0; top:0; bottom:0;
+    background:linear-gradient(270deg,#7a2b25,var(--crimson))}
+  .hp-corner .meta-line{display:flex; justify-content:space-between; font-size:10px; color:var(--bone-dim); margin-top:4px; letter-spacing:.04em}
+  .hp-corner .prana{display:flex; gap:3px; margin-top:5px}
+  .hp-corner.opp .prana{justify-content:flex-end}
+  .hp-corner .drop{width:8px; height:11px; border-radius:0 0 4px 4px/0 0 6px 6px; background:#0c1218; border:1px solid var(--line); transition:.3s}
+  .hp-corner .drop.full{background:radial-gradient(circle at 40% 30%, var(--ember-2), var(--ember)); border-color:var(--ember); box-shadow:0 0 7px -1px var(--ember)}
 
-  .slot{position:absolute; bottom:18px; width:120px; height:180px;
-    display:flex; align-items:flex-end; justify-content:center;}
-  .slot.left{left:8%} .slot.right{right:8%}
-  .slot .shadow{position:absolute; bottom:6px; left:50%; transform:translateX(-50%);
-    width:78px; height:10px; border-radius:50%;
-    background:radial-gradient(ellipse, rgba(0,0,0,.55), transparent 70%); filter:blur(2px);}
-  .sprite{width:96px; height:120px; image-rendering:pixelated; image-rendering:crisp-edges;
+  /* ---- LEFT RAIL --- moves + round log ------------------------------- */
+  .left-rail{
+    position:fixed; top:var(--header-h); left:0; bottom:var(--footer-h); width:var(--left-w); z-index:7;
+    display:flex; flex-direction:column; gap:8px;
+    padding:10px 10px 12px;
+    background:linear-gradient(90deg, rgba(8,12,18,.72) 0%, rgba(8,12,18,.45) 100%);
+    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+    border-right:1px solid rgba(255,255,255,.06);
+    color:var(--bone); overflow:hidden;
+  }
+  .right-rail{
+    position:fixed; top:var(--header-h); right:0; bottom:var(--footer-h); width:var(--right-w); z-index:7;
+    display:flex; flex-direction:column; gap:6px;
+    padding:10px 10px 12px;
+    background:linear-gradient(-90deg, rgba(8,12,18,.72) 0%, rgba(8,12,18,.45) 100%);
+    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+    border-left:1px solid rgba(255,255,255,.06);
+    color:var(--bone); overflow:hidden;
+  }
+  .rail-label{flex:0 0 auto; font-family:"Eczar"; font-size:9.5px; letter-spacing:.22em; text-transform:uppercase; color:var(--bone-dim); padding:1px 2px}
+
+  /* moves — 2-col grid in the left rail */
+  .sb-moves{flex:0 0 auto; display:grid; grid-template-columns:1fr 1fr; gap:5px}
+  .mv{appearance:none; cursor:pointer; text-align:left; color:var(--bone);
+    background:linear-gradient(180deg, rgba(25,34,46,.65), rgba(14,20,28,.65));
+    border:1px solid var(--line); border-radius:8px; padding:6px 8px 7px;
+    transition:transform .16s, box-shadow .25s, border-color .2s, background .2s;
+    position:relative; overflow:hidden;
+    backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+  }
+  /* shimmer line that sweeps across on hover */
+  .mv::before{
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(110deg, transparent 30%, rgba(232,161,58,.18) 50%, transparent 70%);
+    transform:translateX(-110%); transition:transform .55s ease;
+  }
+  .mv:hover:not(:disabled)::before{ transform:translateX(110%) }
+  .mv:hover:not(:disabled){
+    border-color:var(--ember); transform:translateY(-1px);
+    box-shadow:0 6px 14px -8px var(--ember), inset 0 0 0 1px rgba(232,161,58,.2);
+    background:linear-gradient(180deg, rgba(40,32,18,.7), rgba(20,14,6,.65));
+  }
+  .mv:active:not(:disabled){ transform:translateY(0) scale(.98) }
+  .mv:disabled{opacity:.4; cursor:not-allowed}
+  .mv .g{font-size:14px; display:inline-block; transition:transform .3s, filter .3s}
+  .mv:hover:not(:disabled) .g{ transform:scale(1.18) rotate(-4deg); filter:drop-shadow(0 0 6px var(--ember-2)) }
+  .mv .l{display:block; font-family:"Eczar"; font-size:11px; margin-top:1px; font-weight:600; letter-spacing:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mv .c{font-size:9px; color:var(--ember-2); letter-spacing:.04em; margin-top:0}
+  .mv .c.free{color:var(--bone-dim)}
+  /* selected commit state — when a move was just clicked and is resolving */
+  .mv.just-picked{
+    border-color:var(--ember-2);
+    background:linear-gradient(180deg, rgba(60,40,16,.85), rgba(30,18,4,.7));
+    box-shadow:0 0 0 1px var(--ember), 0 0 22px -4px var(--ember);
+    animation:mvFlash .5s ease-out;
+  }
+  @keyframes mvFlash{
+    0%{ transform:scale(1) }
+    30%{ transform:scale(1.05); box-shadow:0 0 0 2px var(--ember-2), 0 0 40px -2px var(--ember-2) }
+    100%{ transform:scale(1) }
+  }
+
+  /* round log — scrollable, fills remaining rail height */
+  .sb-log{flex:1 1 auto; min-height:0; overflow:auto; font-size:10.5px; color:var(--bone-dim); line-height:1.45;
+    padding-top:5px; border-top:1px dashed var(--line); margin-top:1px}
+  .sb-log b{color:var(--bone); font-weight:500}
+  .sb-log > div{padding:2px 3px; border-radius:4px; margin-bottom:1px}
+  .sb-log > div:nth-child(1){background:rgba(232,161,58,.05)}
+
+  /* ---- LEADERBOARD (right rail) ------------------------------------- */
+  .ladder{display:flex; flex-direction:column; gap:5px; flex:1 1 auto; min-height:0; overflow:auto}
+  .ladder-item{
+    background:rgba(20,28,38,.42); border:1px solid var(--line);
+    border-radius:7px; padding:6px 8px; position:relative;
+    display:flex; align-items:center; gap:7px; transition:.3s;
+  }
+  .ladder-item .idx{
+    width:20px; height:20px; border-radius:50%; background:rgba(255,255,255,.06);
+    color:var(--bone); display:grid; place-items:center; flex-shrink:0;
+    font-family:"Eczar"; font-size:11px; font-weight:600;
+    border:1px solid var(--line);
+  }
+  .ladder-item .who{flex:1; min-width:0}
+  .ladder-item .who .nm{font-family:"Eczar"; font-size:12px; font-weight:600; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .ladder-item .who .ti{font-size:9px; color:var(--bone-dim); letter-spacing:.03em; margin-top:1px; line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .ladder-item .dot{width:7px; height:7px; border-radius:50%; background:rgba(255,255,255,.12); flex-shrink:0; transition:.3s}
+
+  .ladder-item.defeated{opacity:.42}
+  .ladder-item.defeated .idx{background:rgba(255,255,255,.15); color:var(--bone-dim)}
+  .ladder-item.defeated .dot{background:var(--bone-dim); box-shadow:0 0 6px var(--bone-dim)}
+  .ladder-item.defeated .idx::after{content:"✓"; position:absolute; font-size:14px; color:var(--bone)}
+  .ladder-item.defeated .idx > span{display:none}
+
+  .ladder-item.current{
+    border-color:var(--ember);
+    background:linear-gradient(180deg, rgba(40,32,16,.55), rgba(30,22,12,.4));
+    box-shadow:0 0 16px -6px var(--ember), inset 0 0 12px -6px var(--ember);
+  }
+  .ladder-item.current .idx{background:var(--ember); color:#10171f; border-color:var(--ember-2); box-shadow:0 0 10px var(--ember)}
+  .ladder-item.current .dot{background:var(--ember); box-shadow:0 0 12px var(--ember); animation:ladderPulse 1.8s ease-in-out infinite}
+
+  .ladder-item.locked{opacity:.55; filter:saturate(.5)}
+
+  @keyframes ladderPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.4)}}
+
+  /* ---- DUEL AREA — between rails, below header, above footer -------- */
+  .duel{
+    position:fixed;
+    top:var(--header-h); left:var(--left-w); right:var(--right-w); bottom:var(--footer-h);
+    z-index:2; pointer-events:none; overflow:hidden;
+  }
+
+  /* fighter slots — relative to .duel. Bigger sprites. */
+  .slot{
+    position:absolute; bottom:6%; width:240px; height:300px;
+    display:flex; align-items:flex-end; justify-content:center;
+    pointer-events:none;
+  }
+  .slot.left  { left:18% }
+  .slot.right { right:18% }
+  @media (max-width:1280px){ .slot.left{left:12%} .slot.right{right:12%} }
+  @media (max-width:1080px){ .slot.left{left:8%}  .slot.right{right:8%} }
+  /* ---- AURA HALOS + GROUND RING — make fighters feel alive ----------- */
+  /* soft colored glow that pulses behind each fighter like breath */
+  .slot::before{
+    content:""; position:absolute; bottom:8px; left:50%;
+    width:220px; height:260px; border-radius:50%;
+    background:radial-gradient(50% 55% at 50% 60%,
+      rgba(232,161,58,.22) 0%, rgba(232,161,58,.10) 35%, transparent 72%);
+    filter:blur(10px);
+    transform:translateX(-50%);
+    animation:auraBreathe 3.6s ease-in-out infinite;
+    pointer-events:none; z-index:1;
+  }
+  .slot.right::before{
+    background:radial-gradient(50% 55% at 50% 60%,
+      color-mix(in srgb, var(--accent) 26%, transparent) 0%,
+      color-mix(in srgb, var(--accent) 12%, transparent) 35%,
+      transparent 72%);
+  }
+  @keyframes auraBreathe{
+    0%,100%{ transform:translateX(-50%) scale(1);     opacity:.55 }
+    50%   { transform:translateX(-50%) scale(1.08);  opacity:.85 }
+  }
+
+  /* faint circular ground ring under each fighter for groundedness */
+  .slot::after{
+    content:""; position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+    width:120px; height:18px; border-radius:50%;
+    border:1px solid rgba(255,255,255,.08);
+    background:radial-gradient(ellipse, rgba(255,255,255,.05), transparent 70%);
+    box-shadow:0 0 12px rgba(0,0,0,.4) inset;
+    pointer-events:none; z-index:1;
+    animation:floorPulse 3.6s ease-in-out infinite;
+  }
+  @keyframes floorPulse{
+    0%,100%{ opacity:.45; transform:translateX(-50%) scaleX(1)    }
+    50%   { opacity:.7;  transform:translateX(-50%) scaleX(1.12) }
+  }
+
+  .slot .shadow{
+    position:absolute; bottom:6px; left:50%; transform:translateX(-50%);
+    width:140px; height:14px; border-radius:50%;
+    background:radial-gradient(ellipse, rgba(0,0,0,.75), transparent 70%); filter:blur(4px);
+    z-index:1;
+  }
+  .sprite{
+    width:190px; height:240px;
+    image-rendering:pixelated; image-rendering:crisp-edges;
     transition:transform .35s cubic-bezier(.2,.8,.2,1), filter .3s, opacity .3s;
-    position:relative; z-index:2; filter:drop-shadow(0 4px 6px rgba(0,0,0,.6));}
+    position:relative; z-index:2;
+    filter:drop-shadow(0 8px 12px rgba(0,0,0,.7));
+  }
   .slot.right .sprite{transform:scaleX(-1)}
+
+  /* ---- FOOTER MIND-SCROLL ------------------------------------------ */
+  .footer-scroll{
+    position:fixed; left:0; right:0; bottom:0; height:var(--footer-h); z-index:8;
+    background:linear-gradient(0deg, rgba(8,12,18,.92) 0%, rgba(8,12,18,.4) 80%, transparent 100%);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border-top:1px solid rgba(255,255,255,.06);
+    padding:14px 28px 16px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .footer-scroll .inner{
+    max-width:920px; margin:0 auto; width:100%;
+    background:linear-gradient(180deg, rgba(233,226,208,.05), rgba(233,226,208,.01)), rgba(20,28,38,.42);
+    border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:10px;
+    padding:12px 18px;
+    max-height:108px; overflow-y:auto; overflow-x:hidden;
+    /* suppress always-on scrollbar gutter when content fits */
+    scrollbar-width:none;
+  }
+  .footer-scroll .inner::-webkit-scrollbar{display:none}
+  .footer-scroll .hdr{display:flex; align-items:center; gap:8px; font-size:10.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--bone-dim)}
+  .footer-scroll .hdr .dot{width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent)}
+  .footer-scroll .think{font-family:"Eczar"; font-weight:500; font-size:15.5px; line-height:1.5; margin-top:5px; color:var(--bone); font-style:italic; min-height:1.4em}
+  .footer-scroll .taunt{margin-top:5px; font-size:13px; color:var(--accent); font-weight:500}
+  .footer-scroll .taunt::before{content:"\201C"} .footer-scroll .taunt::after{content:"\201D"}
+  .footer-scroll .reading{color:var(--bone-dim); font-style:italic}
+  .footer-scroll .reading::after{content:"\2026"; animation:blink 1.2s steps(4) infinite}
+  @keyframes blink{0%{opacity:.2}50%{opacity:1}100%{opacity:.2}}
+
+  /* ---- MOBILE FALLBACK --------------------------------------------- */
+  @media (max-width:900px){
+    :root{ --header-h:54px; --left-w:0px; --right-w:0px; --footer-h:auto }
+    .left-rail, .right-rail{display:none}
+    .hp-corner{width:auto; max-width:46vw; padding:7px 10px 8px}
+    .hp-corner.player{left:8px; top:60px}
+    .hp-corner.opp{right:8px; top:60px}
+    .footer-scroll{position:static; backdrop-filter:none; padding:10px}
+    .duel{bottom:0}
+  }
+
+  /* ==== OVERLAY (intro/end-of-round card) — unchanged ==================== */
+  .ov{position:fixed; inset:0; z-index:30; display:grid; place-items:center; padding:24px;
+    background:radial-gradient(800px 500px at 50% 40%, rgba(20,30,42,.9), rgba(5,8,12,.96)); backdrop-filter:blur(3px)}
+  .ov.hide{display:none}
+  .card{max-width:440px; width:100%; text-align:center; background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line); border-radius:18px; padding:30px 26px; box-shadow:var(--shadow); animation:rise .5s both}
+  @keyframes rise{from{opacity:0; transform:translateY(14px)}to{opacity:1; transform:none}}
+  .card .em{font-size:40px}
+  .card h2{font-family:"Eczar"; font-weight:700; font-size:25px; margin:.4em 0 .1em}
+  .card .sub{color:var(--bone-dim); font-size:13.5px; letter-spacing:.03em}
+  .card .bio{font-size:14px; line-height:1.6; margin:16px 0 6px}
+  .btn{appearance:none; cursor:pointer; margin-top:18px; font-family:"Mukta"; font-weight:600; font-size:15px;
+    color:#10171f; background:linear-gradient(180deg,var(--ember-2),var(--ember)); border:none; border-radius:11px;
+    padding:12px 26px; letter-spacing:.03em; box-shadow:0 10px 24px -10px var(--ember); transition:.15s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn.ghost{background:transparent; color:var(--bone); border:1px solid var(--line); box-shadow:none}
+
+  /* damage-float "—N HP" numbers that pop above HP cards on hit */
+  .floats{position:absolute; inset:0; pointer-events:none}
+  .float{position:absolute; font-family:"Eczar"; font-weight:700; font-size:22px; animation:fl 1s ease-out forwards}
+  @keyframes fl{from{opacity:0; transform:translateY(8px) scale(.9)}20%{opacity:1}to{opacity:0; transform:translateY(-26px)}}
+  .shake{animation:hpShake .4s}
+  @keyframes hpShake{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+  /* === IDENTITY (on intro card) ====================================== */
+  .ident{margin:14px auto 6px; max-width:300px; text-align:left}
+  .ident-lbl{font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--bone-dim); margin-bottom:6px; text-align:center}
+  .ident-input{width:100%; padding:10px 12px; font-family:"Mukta"; font-size:14px;
+    color:var(--bone); background:#0e151d; border:1px solid var(--line);
+    border-radius:10px; outline:none; transition:.15s; text-align:center;
+    letter-spacing:.04em}
+  .ident-input:focus{border-color:var(--ember); box-shadow:0 0 0 3px rgba(232,161,58,.18)}
+  .ident-cta{margin-top:10px; font-size:12.5px; color:var(--bone-dim); text-align:center}
+  .ident-link{color:var(--ember-2); text-decoration:none; border-bottom:1px dashed var(--ember-2);
+    padding-bottom:1px; font-weight:600}
+  .ident-link:hover{color:#fff; border-color:#fff}
+  .ident-or{display:block; margin-top:4px; font-size:11.5px; opacity:.7}
+  .ident-status{margin-top:8px; font-size:11.5px; color:var(--accent); text-align:center; min-height:1em}
+
+  /* === HEADER LEADERBOARD LINK ======================================== */
+  .lb-link{appearance:none; cursor:pointer; font-family:"Mukta";
+    font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent); background:transparent; border:1px solid var(--line);
+    border-radius:6px; padding:4px 9px; transition:.15s; margin-left:10px}
+  .lb-link:hover{border-color:var(--accent); background:rgba(207,232,240,.08)}
+
+  /* === LEADERBOARD MODAL ============================================== */
+  .lb-card{max-width:560px}
+  .lb-status{font-size:11.5px; color:var(--bone-dim); margin:4px 0 8px; min-height:1em; letter-spacing:.03em}
+  .lb-table{margin:12px 0 6px; max-height:360px; overflow:auto; text-align:left;
+    border-top:1px dashed var(--line); border-bottom:1px dashed var(--line); padding:8px 0}
+  .lb-row{display:grid; grid-template-columns:32px 1fr 64px 76px; gap:8px; align-items:baseline;
+    padding:6px 4px; font-size:13px; border-radius:6px}
+  .lb-row.head{font-size:10.5px; color:var(--bone-dim); letter-spacing:.12em;
+    text-transform:uppercase; border-bottom:1px solid var(--line); padding-bottom:8px; margin-bottom:4px}
+  .lb-row.you{background:rgba(232,161,58,.12); box-shadow:inset 0 0 0 1px rgba(232,161,58,.35)}
+  .lb-row .rk{font-family:"VT323",monospace; font-size:18px; color:var(--ember-2); text-align:center}
+  .lb-row .nm{font-family:"Eczar"; font-weight:600; color:var(--bone); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .lb-row .nm .verified{color:var(--accent); font-size:10px; margin-left:4px; vertical-align:middle}
+  .lb-row .tn{font-family:"VT323",monospace; font-size:17px; color:var(--bone); text-align:right}
+  .lb-row .tm{font-family:"VT323",monospace; font-size:17px; color:var(--bone-dim); text-align:right}
+  .lb-empty{padding:24px 8px; text-align:center; color:var(--bone-dim); font-style:italic; font-size:13.5px}
+
   .slot.left  .sprite.pose-strike    { animation:lungeR .55s ease-out }
   .slot.right .sprite.pose-strike    { animation:lungeL .55s ease-out }
   .slot.left  .sprite.pose-grapple   { animation:lungeR .7s ease-in-out }
@@ -199,28 +497,90 @@
   .slot.right .sprite.pose-mist_step { animation:vanish .9s ease-in-out; transform:scaleX(-1) }
   .slot.left  .sprite.hit            { animation:hitL .45s ease-out }
   .slot.right .sprite.hit            { animation:hitR .45s ease-out }
-  @keyframes lungeR{0%{transform:translateX(0) scaleX(1)}25%{transform:translateX(-10px) scaleX(1)}55%{transform:translateX(40px) scaleX(1) skewX(-6deg)}100%{transform:translateX(0) scaleX(1)}}
-  @keyframes lungeL{0%{transform:scaleX(-1) translateX(0)}25%{transform:scaleX(-1) translateX(-10px)}55%{transform:scaleX(-1) translateX(40px) skewX(-6deg)}100%{transform:scaleX(-1) translateX(0)}}
-  @keyframes brace{0%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}50%{filter:drop-shadow(0 0 12px var(--accent)) drop-shadow(0 0 24px var(--accent))}100%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}}
-  @keyframes breathe{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px); filter:drop-shadow(0 -6px 14px var(--ember))}}
-  @keyframes cast{0%{transform:translateY(0)}35%{transform:translateY(-4px); filter:drop-shadow(0 0 18px var(--ember-2))}100%{transform:translateY(0)}}
-  @keyframes vanish{0%{opacity:1; filter:blur(0)}40%{opacity:.15; filter:blur(6px)}70%{opacity:.15; filter:blur(6px); transform:translateX(20px)}100%{opacity:1; filter:blur(0)}}
+  @keyframes lungeR{0%{transform:translateX(0) scaleX(1)}25%{transform:translateX(-18px) scaleX(1)}55%{transform:translateX(70px) scaleX(1) skewX(-6deg)}100%{transform:translateX(0) scaleX(1)}}
+  @keyframes lungeL{0%{transform:scaleX(-1) translateX(0)}25%{transform:scaleX(-1) translateX(-18px)}55%{transform:scaleX(-1) translateX(70px) skewX(-6deg)}100%{transform:scaleX(-1) translateX(0)}}
+  @keyframes brace{
+    0%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}
+    35%{filter:drop-shadow(0 0 16px var(--accent)) drop-shadow(0 0 36px var(--accent)) brightness(1.15)}
+    70%{filter:drop-shadow(0 0 12px var(--accent)) drop-shadow(0 0 24px var(--accent))}
+    100%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}
+  }
+  @keyframes breathe{
+    0%,100%{transform:translateY(0); filter:drop-shadow(0 8px 12px rgba(0,0,0,.7))}
+    40%{transform:translateY(-4px); filter:drop-shadow(0 -4px 18px var(--ember-2)) brightness(1.08)}
+    65%{transform:translateY(-10px); filter:drop-shadow(0 -8px 30px var(--ember)) brightness(1.18)}
+  }
+  @keyframes cast{
+    0%   {transform:translateY(0); filter:drop-shadow(0 8px 12px rgba(0,0,0,.7))}
+    18%  {transform:translateY(-2px) scale(1.02); filter:drop-shadow(0 0 12px var(--ember)) brightness(1.2)}
+    42%  {transform:translateY(-8px) scale(1.05); filter:drop-shadow(0 0 40px var(--ember-2)) brightness(1.6)}
+    62%  {transform:translateY(-6px) scale(1.04); filter:drop-shadow(0 0 50px var(--ember-2)) brightness(1.9) contrast(1.1)}
+    100% {transform:translateY(0); filter:drop-shadow(0 8px 12px rgba(0,0,0,.7))}
+  }
+  @keyframes vanish{
+    0%  {opacity:1; filter:blur(0)}
+    25% {opacity:.5; filter:blur(3px) brightness(1.3); transform:translateX(0)}
+    50% {opacity:.08; filter:blur(12px); transform:translateX(30px)}
+    75% {opacity:.08; filter:blur(12px); transform:translateX(-30px)}
+    100%{opacity:1; filter:blur(0); transform:translateX(0)}
+  }
   @keyframes hitL{0%{filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}20%{transform:translateX(-12px); filter:drop-shadow(0 0 14px var(--crimson)) brightness(2)}50%{transform:translateX(4px)}100%{transform:translateX(0)}}
   @keyframes hitR{0%{transform:scaleX(-1); filter:drop-shadow(0 4px 6px rgba(0,0,0,.6))}20%{transform:scaleX(-1) translateX(-12px); filter:drop-shadow(0 0 14px var(--crimson)) brightness(2)}50%{transform:scaleX(-1) translateX(4px)}100%{transform:scaleX(-1) translateX(0)}}
 
   .fx{position:absolute; inset:0; pointer-events:none; z-index:3}
-  .projectile{position:absolute; width:18px; height:18px; border-radius:50%;
-    background:radial-gradient(circle, #fff, var(--ember-2) 40%, var(--ember) 75%, transparent 100%);
-    box-shadow:0 0 22px var(--ember), 0 0 42px var(--ember-2);
-    animation:projFly .55s linear forwards;}
+  /* projectile orb + tail trail (the tail is a ::before pseudo) */
+  .projectile{position:absolute; width:28px; height:28px; border-radius:50%;
+    background:radial-gradient(circle, #fff, var(--ember-2) 35%, var(--ember) 70%, transparent 100%);
+    box-shadow:0 0 32px var(--ember), 0 0 64px var(--ember-2), 0 0 96px rgba(232,161,58,.4);
+    animation:projFly .55s linear forwards;
+  }
+  .projectile::before{
+    content:""; position:absolute; right:100%; top:50%; transform:translateY(-50%);
+    width:80px; height:8px; border-radius:8px;
+    background:linear-gradient(90deg, transparent, rgba(232,161,58,.5), var(--ember-2));
+    filter:blur(3px);
+  }
   .projectile.rev{animation:projFlyRev .55s linear forwards}
-  @keyframes projFly{from{left:18%; bottom:90px; transform:scale(.4)}to{left:82%; bottom:110px; transform:scale(1.4)}}
-  @keyframes projFlyRev{from{right:18%; bottom:90px; transform:scale(.4)}to{right:82%; bottom:110px; transform:scale(1.4)}}
-  .impact{position:absolute; width:60px; height:60px; border-radius:50%;
-    background:radial-gradient(circle, #fff 0%, var(--crimson) 30%, transparent 70%);
+  .projectile.rev::before{right:auto; left:100%;
+    background:linear-gradient(-90deg, transparent, rgba(232,161,58,.5), var(--ember-2));
+  }
+  @keyframes projFly{
+    0%  {left:18%; bottom:90px;  transform:scale(.4)}
+    50% {bottom:130px;            transform:scale(1.2)}
+    100%{left:82%; bottom:110px; transform:scale(1.5)}
+  }
+  @keyframes projFlyRev{
+    0%  {right:18%; bottom:90px;  transform:scale(.4) scaleX(-1)}
+    50% {bottom:130px;             transform:scale(1.2) scaleX(-1)}
+    100%{right:82%; bottom:110px; transform:scale(1.5) scaleX(-1)}
+  }
+  /* impact: bright flash + expanding ring */
+  .impact{position:absolute; width:80px; height:80px; border-radius:50%;
+    background:radial-gradient(circle, #fff 0%, var(--crimson) 35%, transparent 70%);
     transform:translate(-50%,-50%) scale(.2); opacity:0;
-    animation:impactPop .45s ease-out forwards;}
-  @keyframes impactPop{0%{opacity:0; transform:translate(-50%,-50%) scale(.2)}30%{opacity:1; transform:translate(-50%,-50%) scale(1)}100%{opacity:0; transform:translate(-50%,-50%) scale(1.6)}}
+    animation:impactPop .5s ease-out forwards;
+    box-shadow:0 0 48px var(--crimson), 0 0 96px rgba(192,71,59,.5);
+  }
+  .impact::after{
+    content:""; position:absolute; inset:-12px; border-radius:50%;
+    border:2px solid var(--crimson);
+    box-shadow:0 0 18px var(--crimson);
+    animation:impactRing .55s ease-out forwards;
+  }
+  @keyframes impactPop{0%{opacity:0; transform:translate(-50%,-50%) scale(.2)}25%{opacity:1; transform:translate(-50%,-50%) scale(1)}100%{opacity:0; transform:translate(-50%,-50%) scale(1.8)}}
+  @keyframes impactRing{0%{opacity:0; transform:scale(.5)}30%{opacity:1}100%{opacity:0; transform:scale(2.6)}}
+  /* screen-shake on heavy hits */
+  .duel.shake-screen{animation:bigShake .42s ease-out}
+  @keyframes bigShake{
+    0%,100%{ transform:translate(0,0) }
+    10%{ transform:translate(-4px, 2px) }
+    20%{ transform:translate(3px,-4px) }
+    30%{ transform:translate(-3px,-3px) }
+    45%{ transform:translate(4px, 2px) }
+    60%{ transform:translate(-2px, 3px) }
+    75%{ transform:translate(2px,-1px) }
+    90%{ transform:translate(-1px, 0) }
+  }
   .mistpuff{position:absolute; width:120px; height:120px; border-radius:50%;
     background:radial-gradient(circle, rgba(207,232,240,.55), transparent 65%);
     transform:translate(-50%,-50%) scale(.4); opacity:0;
@@ -237,85 +597,16 @@
     opacity:0; transform:translateX(-50%);
     animation:breathRise 1.1s ease-out forwards; filter:blur(1px);}
   @keyframes breathRise{0%{opacity:0; transform:translateX(-50%) translateY(0) scaleY(.4)}30%{opacity:.9}100%{opacity:0; transform:translateX(-50%) translateY(-50px) scaleY(1.2)}}
-  .move-banner{position:absolute; top:14px; left:50%; transform:translateX(-50%);
-    font-family:"VT323",monospace; font-size:22px; letter-spacing:.14em;
-    color:var(--accent); text-shadow:0 0 10px var(--accent);
+  .move-banner{position:absolute; top:64px; left:50%; transform:translateX(-50%);
+    font-family:"VT323",monospace; font-size:30px; letter-spacing:.14em;
+    color:var(--accent); text-shadow:0 0 12px var(--accent);
     opacity:0; animation:bannerIn .9s ease-out forwards; white-space:nowrap;}
   @keyframes bannerIn{0%{opacity:0; transform:translateX(-50%) translateY(-6px)}20%{opacity:1; transform:translateX(-50%) translateY(0)}80%{opacity:1}100%{opacity:0; transform:translateX(-50%) translateY(-4px)}}
   .move-banner .vs{color:var(--ember-2); text-shadow:0 0 8px var(--ember-2); margin:0 .5em}
   .move-banner .pl{color:var(--ember-2); text-shadow:0 0 8px var(--ember-2)}
 
-  .info-row{display:grid; grid-template-columns:1fr 1fr; gap:12px}
-  .fighter{background:linear-gradient(180deg,var(--panel),var(--panel-2)); border:1px solid var(--line);
-    border-radius:var(--r); padding:12px 14px; box-shadow:var(--shadow); position:relative; overflow:hidden}
-  .fighter.opp{border-top:2px solid var(--accent)}
-  .fighter.player{border-top:2px solid var(--ember)}
-  .who .nm{font-family:"Eczar"; font-size:17px; font-weight:600; line-height:1}
-  .who .ti{font-size:11.5px; color:var(--bone-dim); letter-spacing:.03em; margin-top:3px}
-  .bars{margin-top:10px}
-  .bar{height:11px; border-radius:6px; background:#0c1218; border:1px solid var(--line); overflow:hidden; position:relative}
-  .bar > i{display:block; height:100%; border-radius:6px; transition:width .6s cubic-bezier(.2,.8,.2,1)}
-  .hp > i{background:linear-gradient(90deg,#7a2b25,var(--crimson))}
-  .meta-line{display:flex; justify-content:space-between; font-size:11px; color:var(--bone-dim); margin:5px 1px 0; letter-spacing:.04em}
-  .prana{display:flex; gap:4px; margin-top:7px}
-  .drop{width:9px; height:13px; border-radius:0 0 5px 5px / 0 0 8px 8px; background:#0c1218; border:1px solid var(--line); transition:.3s}
-  .drop.full{background:radial-gradient(circle at 40% 30%, var(--ember-2), var(--ember)); border-color:var(--ember);
-    box-shadow:0 0 9px -1px var(--ember)}
-
-  .scroll{margin-top:12px; background:
-      linear-gradient(180deg, rgba(233,226,208,.06), rgba(233,226,208,.02)),
-      var(--ink-2);
-    border:1px solid var(--line); border-left:3px solid var(--accent);
-    border-radius:var(--r); padding:14px 16px; min-height:88px; position:relative; box-shadow:var(--shadow)}
-  .scroll .hdr{display:flex; align-items:center; gap:8px; font-size:11px; letter-spacing:.16em;
-    text-transform:uppercase; color:var(--bone-dim)}
-  .scroll .hdr .dot{width:6px;height:6px;border-radius:50%;background:var(--accent); box-shadow:0 0 8px var(--accent)}
-  .think{font-family:"Eczar"; font-weight:500; font-size:15.5px; line-height:1.5; margin-top:7px; color:var(--bone);
-    font-style:italic; min-height:1.4em}
-  .taunt{margin-top:8px; font-size:13.5px; color:var(--accent); font-weight:500}
-  .taunt::before{content:"\201C"} .taunt::after{content:"\201D"}
-  .reading{color:var(--bone-dim); font-style:italic}
-  .reading::after{content:"\2026"; animation:blink 1.2s steps(4) infinite}
-  @keyframes blink{0%{opacity:.2}50%{opacity:1}100%{opacity:.2}}
-
-  .moves{display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-top:12px}
-  @media(min-width:620px){.moves{grid-template-columns:repeat(6,1fr)}}
-  .mv{appearance:none; cursor:pointer; text-align:left; color:var(--bone);
-    background:linear-gradient(180deg,var(--panel),#16202b); border:1px solid var(--line);
-    border-radius:12px; padding:10px 10px 11px; transition:.16s; position:relative}
-  .mv:hover:not(:disabled){border-color:var(--ember); transform:translateY(-2px); box-shadow:0 10px 22px -12px var(--ember)}
-  .mv:disabled{opacity:.38; cursor:not-allowed}
-  .mv .g{font-size:18px} .mv .l{display:block; font-family:"Eczar"; font-size:13px; margin-top:3px; font-weight:600}
-  .mv .c{font-size:10.5px; color:var(--ember-2); letter-spacing:.04em; margin-top:2px}
-  .mv .c.free{color:var(--bone-dim)}
-
-  .log{margin-top:14px; font-size:12.5px; color:var(--bone-dim); line-height:1.7; max-height:120px; overflow:auto;
-    border-top:1px dashed var(--line); padding-top:10px}
-  .log b{color:var(--bone); font-weight:500}
-
-  .ov{position:fixed; inset:0; z-index:20; display:grid; place-items:center; padding:24px;
-    background:radial-gradient(800px 500px at 50% 40%, rgba(20,30,42,.9), rgba(5,8,12,.96)); backdrop-filter:blur(3px)}
-  .ov.hide{display:none}
-  .card{max-width:440px; width:100%; text-align:center; background:linear-gradient(180deg,var(--panel),var(--panel-2));
-    border:1px solid var(--line); border-radius:18px; padding:30px 26px; box-shadow:var(--shadow); animation:rise .5s both}
-  @keyframes rise{from{opacity:0; transform:translateY(14px)}to{opacity:1; transform:none}}
-  .card .em{font-size:40px}
-  .card h2{font-family:"Eczar"; font-weight:700; font-size:25px; margin:.4em 0 .1em}
-  .card .sub{color:var(--bone-dim); font-size:13.5px; letter-spacing:.03em}
-  .card .bio{font-size:14px; line-height:1.6; margin:16px 0 6px}
-  .btn{appearance:none; cursor:pointer; margin-top:18px; font-family:"Mukta"; font-weight:600; font-size:15px;
-    color:#10171f; background:linear-gradient(180deg,var(--ember-2),var(--ember)); border:none; border-radius:11px;
-    padding:12px 26px; letter-spacing:.03em; box-shadow:0 10px 24px -10px var(--ember); transition:.15s}
-  .btn:hover{transform:translateY(-2px)}
-  .btn.ghost{background:transparent; color:var(--bone); border:1px solid var(--line); box-shadow:none}
-  .floats{position:absolute; inset:0; pointer-events:none}
-  .float{position:absolute; font-family:"Eczar"; font-weight:700; font-size:22px; animation:fl 1s ease-out forwards}
-  @keyframes fl{from{opacity:0; transform:translateY(8px) scale(.9)}20%{opacity:1}to{opacity:0; transform:translateY(-26px)}}
-  .shake{animation:shake .4s}
-  @keyframes shake{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
-
   /* === TWEAKS PANEL =================================================== */
-  .tweaks{position:fixed; right:18px; bottom:18px; z-index:50; width:240px;
+  .tweaks{position:fixed; left:18px; bottom:18px; z-index:50; width:240px;
     background:linear-gradient(180deg,var(--panel),var(--panel-2));
     border:1px solid var(--line); border-radius:14px;
     box-shadow:0 24px 60px -20px rgba(0,0,0,.7), 0 0 0 1px rgba(0,0,0,.4);
@@ -351,46 +642,6 @@
     border-radius:50%; background:var(--bone-dim); transition:.2s}
   .tweaks .switch.on{background:var(--ember)}
   .tweaks .switch.on::after{left:15px; background:#fff}
-
-  /* === IDENTITY (on intro card) ====================================== */
-  .ident{margin:14px auto 6px; max-width:300px; text-align:left}
-  .ident-lbl{font-size:11px; letter-spacing:.16em; text-transform:uppercase;
-    color:var(--bone-dim); margin-bottom:6px; text-align:center}
-  .ident-input{width:100%; padding:10px 12px; font-family:"Mukta"; font-size:14px;
-    color:var(--bone); background:#0e151d; border:1px solid var(--line);
-    border-radius:10px; outline:none; transition:.15s; text-align:center;
-    letter-spacing:.04em}
-  .ident-input:focus{border-color:var(--ember); box-shadow:0 0 0 3px rgba(232,161,58,.18)}
-  .ident-cta{margin-top:10px; font-size:12.5px; color:var(--bone-dim); text-align:center}
-  .ident-link{color:var(--ember-2); text-decoration:none; border-bottom:1px dashed var(--ember-2);
-    padding-bottom:1px; font-weight:600}
-  .ident-link:hover{color:#fff; border-color:#fff}
-  .ident-or{display:block; margin-top:4px; font-size:11.5px; opacity:.7}
-  .ident-status{margin-top:8px; font-size:11.5px; color:var(--accent); text-align:center; min-height:1em}
-
-  /* === HEADER LEADERBOARD LINK ======================================== */
-  .lb-link{appearance:none; cursor:pointer; margin-top:6px; font-family:"Mukta";
-    font-size:11px; letter-spacing:.14em; text-transform:uppercase;
-    color:var(--accent); background:transparent; border:1px solid var(--line);
-    border-radius:6px; padding:4px 9px; transition:.15s}
-  .lb-link:hover{border-color:var(--accent); background:rgba(207,232,240,.08)}
-
-  /* === LEADERBOARD MODAL ============================================== */
-  .lb-card{max-width:560px}
-  .lb-status{font-size:11.5px; color:var(--bone-dim); margin:4px 0 8px; min-height:1em; letter-spacing:.03em}
-  .lb-table{margin:12px 0 6px; max-height:360px; overflow:auto; text-align:left;
-    border-top:1px dashed var(--line); border-bottom:1px dashed var(--line); padding:8px 0}
-  .lb-row{display:grid; grid-template-columns:32px 1fr 64px 76px; gap:8px; align-items:baseline;
-    padding:6px 4px; font-size:13px; border-radius:6px}
-  .lb-row.head{font-size:10.5px; color:var(--bone-dim); letter-spacing:.12em;
-    text-transform:uppercase; border-bottom:1px solid var(--line); padding-bottom:8px; margin-bottom:4px}
-  .lb-row.you{background:rgba(232,161,58,.12); box-shadow:inset 0 0 0 1px rgba(232,161,58,.35)}
-  .lb-row .rk{font-family:"VT323",monospace; font-size:18px; color:var(--ember-2); text-align:center}
-  .lb-row .nm{font-family:"Eczar"; font-weight:600; color:var(--bone); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-  .lb-row .nm .verified{color:var(--accent); font-size:10px; margin-left:4px; vertical-align:middle}
-  .lb-row .tn{font-family:"VT323",monospace; font-size:17px; color:var(--bone); text-align:right}
-  .lb-row .tm{font-family:"VT323",monospace; font-size:17px; color:var(--bone-dim); text-align:right}
-  .lb-empty{padding:24px 8px; text-align:center; color:var(--bone-dim); font-style:italic; font-size:13.5px}
 </style>
 </head>
 <body>
@@ -434,59 +685,77 @@
   <div class="vignette"></div>
   <div class="grain"></div>
 
-  <div class="wrap">
-    <header>
-      <div class="brand">
-        <span class="deva">॥ धुंध ॥</span>
-        <h1>THE MIST DUEL</h1>
-        <span class="tag">read your opponent before they move — they are reading you</span>
-      </div>
-      <div style="text-align:right">
-        <div class="pips" id="pips"></div>
-        <div class="backend" id="backend"></div>
-        <button class="lb-link" id="openLb" title="Show the climbers' board">▲ Leaderboard</button>
-      </div>
-    </header>
-
-    <div class="stage" id="stage">
-      <div class="lantern l1"></div><div class="lantern l2"></div><div class="lantern l3"></div>
-      <div class="slot right" id="slotOpp"><div class="shadow"></div><div class="sprite" id="oppSprite"></div></div>
-      <div class="slot left" id="slotPl"><div class="shadow"></div><div class="sprite" id="plSprite"></div></div>
-      <div class="fx" id="fx"></div>
-      <div class="ground"></div>
+  <!-- HEADER: brand + ladder pips + backend tag -->
+  <header class="topbar">
+    <div class="brand-row">
+      <span class="deva">॥ धुंध ॥</span>
+      <h1>THE MIST DUEL</h1>
+      <div class="pips" id="pips"></div>
     </div>
-
-    <div class="info-row">
-      <div class="fighter player" id="plPanel">
-        <div class="who"><div class="nm">You</div><div class="ti">challenger of the hidden village</div></div>
-        <div class="bars">
-          <div class="bar hp"><i id="plHp" style="width:100%"></i></div>
-          <div class="meta-line"><span id="plHpTxt">100 HP</span><span>prana</span></div>
-          <div class="prana" id="plPrana"></div>
-        </div>
-        <div class="floats" id="plFloats"></div>
-      </div>
-
-      <div class="fighter opp" id="oppPanel">
-        <div class="who"><div class="nm" id="oppName">—</div><div class="ti" id="oppTitle"></div></div>
-        <div class="bars">
-          <div class="bar hp"><i id="oppHp" style="width:100%"></i></div>
-          <div class="meta-line"><span id="oppHpTxt">100 HP</span><span>prana</span></div>
-          <div class="prana" id="oppPrana"></div>
-        </div>
-        <div class="floats" id="oppFloats"></div>
-      </div>
+    <div style="display:flex; align-items:center; gap:6px">
+      <div class="backend" id="backend"></div>
+      <button class="lb-link" id="openLb" title="Show the climbers' board">▲ Leaderboard</button>
     </div>
+  </header>
 
-    <div class="scroll" id="scroll">
+  <!-- HP CORNER CARDS — anchored just under the header, in the duel corners -->
+  <div class="hp-corner player" id="plPanel">
+    <div class="who">
+      <span class="nm">You</span>
+      <span class="ti">challenger of the hidden village</span>
+    </div>
+    <div class="bar hp"><i id="plHp" style="width:100%"></i></div>
+    <div class="meta-line"><span id="plHpTxt">100 HP</span><span>prana</span></div>
+    <div class="prana" id="plPrana"></div>
+    <div class="floats" id="plFloats"></div>
+  </div>
+
+  <div class="hp-corner opp" id="oppPanel">
+    <div class="who">
+      <span class="nm" id="oppName">—</span>
+      <span class="ti" id="oppTitle"></span>
+    </div>
+    <div class="bar hp"><i id="oppHp" style="width:100%"></i></div>
+    <div class="meta-line"><span id="oppHpTxt">100 HP</span><span>prana</span></div>
+    <div class="prana" id="oppPrana"></div>
+    <div class="floats" id="oppFloats"></div>
+  </div>
+
+  <!-- LEFT RAIL: your moves + per-round log -->
+  <aside class="left-rail">
+    <div class="rail-label">Your Moves</div>
+    <div class="sb-moves" id="moves"></div>
+    <div class="rail-label" style="margin-top:6px">Round Log</div>
+    <div class="sb-log" id="log"></div>
+  </aside>
+
+  <!-- RIGHT RAIL: leaderboard — five champions of the path -->
+  <aside class="right-rail">
+    <div class="rail-label">The Path</div>
+    <div class="ladder" id="ladder"></div>
+  </aside>
+
+  <!-- DUEL — the cinematic stage. Fighters stand on the video itself. -->
+  <div class="duel" id="stage">
+    <div class="slot right" id="slotOpp">
+      <div class="shadow"></div>
+      <div class="sprite" id="oppSprite"></div>
+    </div>
+    <div class="slot left" id="slotPl">
+      <div class="shadow"></div>
+      <div class="sprite" id="plSprite"></div>
+    </div>
+    <div class="fx" id="fx"></div>
+  </div>
+
+  <!-- FOOTER: mind-scroll — the AI's reasoning, full width across the bottom -->
+  <footer class="footer-scroll" id="scroll">
+    <div class="inner">
       <div class="hdr"><span class="dot"></span><span id="scrollLabel">the mind of your opponent</span></div>
       <div class="think reading" id="think">awaiting the opening round.</div>
       <div class="taunt" id="taunt" style="display:none"></div>
     </div>
-
-    <div class="moves" id="moves"></div>
-    <div class="log" id="log"></div>
-  </div>
+  </footer>
 
   <!-- Tweaks panel (background mood presets + density toggles) -->
   <div class="tweaks" id="tweaks">
@@ -506,11 +775,16 @@
       <div class="lbl">Arena</div>
       <div class="opts arena-opts" id="arenaOpts">
         <button class="opt" data-arena=""><span class="swatch" style="background:linear-gradient(180deg,#7a8590,#4a525a)"></span>Auto · follow ladder</button>
-        <button class="opt" data-arena="tashi"><span class="swatch" style="background:#cfe8f0"></span>1 · Tashi · Village</button>
-        <button class="opt" data-arena="norbu"><span class="swatch" style="background:#a8c5d8"></span>2 · Norbu · Monastery</button>
-        <button class="opt" data-arena="pema"><span class="swatch" style="background:#e8c0d8"></span>3 · Pema · Pine Grove</button>
-        <button class="opt" data-arena="drogpa"><span class="swatch" style="background:#f3c270"></span>4 · Drogpa · Cliff</button>
-        <button class="opt" data-arena="the-mountain"><span class="swatch" style="background:#ffd089"></span>5 · The Mountain · Summit</button>
+        <button class="opt" data-arena="tashi"><span class="swatch" style="background:#e0533d"></span>1 · Tashi · Village</button>
+        <button class="opt" data-arena="lhamo"><span class="swatch" style="background:#b8845c"></span>2 · Lhamo · Rope Bridge</button>
+        <button class="opt" data-arena="norbu"><span class="swatch" style="background:#3f7d8c"></span>3 · Norbu · Monastery</button>
+        <button class="opt" data-arena="yeshi"><span class="swatch" style="background:#8ab7c5"></span>4 · Yeshi · Frozen Lake</button>
+        <button class="opt" data-arena="pema"><span class="swatch" style="background:#a45cd0"></span>5 · Pema · Pine Grove</button>
+        <button class="opt" data-arena="karma"><span class="swatch" style="background:#6fc9d9"></span>6 · Karma · Ice Cave</button>
+        <button class="opt" data-arena="drogpa"><span class="swatch" style="background:#c8923a"></span>7 · Drogpa · Cliff</button>
+        <button class="opt" data-arena="tenzin"><span class="swatch" style="background:#c4ccd2"></span>8 · Tenzin · Blizzard Pass</button>
+        <button class="opt" data-arena="the-mountain"><span class="swatch" style="background:#cfe8f0"></span>9 · The Mountain · Summit</button>
+        <button class="opt" data-arena="the-veiled-one"><span class="swatch" style="background:#d8c69a"></span>10 · The Veiled One · Beyond the Veil</button>
       </div>
     </div>
 
@@ -554,6 +828,9 @@
       </div>
 
       <button class="btn" id="cardBtn">Enter the mist</button>
+      <!-- Shown only when SELFPLAY_MODE=1 — see selfplay_live.py. Lets the
+           player watch two LLMs duel through the same UI + animations. -->
+      <div><button class="btn ghost" id="cardBtnSelfplay" style="display:none">Watch self-play</button></div>
       <div><button class="btn ghost" id="cardBtn2" style="display:none">Walk back down</button></div>
     </div>
   </div>
@@ -570,6 +847,9 @@
     </div>
   </div>
 
+  <!-- Game meta — replaced at request time by app.index() with the real
+       backend's _meta() JSON (moves, ladder, HP/prana constants, backend
+       label). Keeps the UI a pure consumer of engine state. -->
   <script id="game-meta" type="application/json">__GAME_META__</script>
 
 <script>
@@ -645,11 +925,16 @@
      a hard cut.
      ============================================================ */
   const ARENAS = {
-    tashi:    { video:"assets/village.mp4",   poster:"assets/village.webp",   name:"Village" },
-    norbu:    { video:"assets/monastery.mp4", poster:"assets/monastery.webp", name:"Monastery" },
-    pema:     { video:"assets/pinegrove.mp4", poster:"assets/pinegrove.webp", name:"Pine Grove" },
-    drogpa:   { video:"assets/cliff.mp4",     poster:"assets/cliff.webp",     name:"Cliff" },
-    "the-mountain": { video:"assets/summit.mp4", poster:"assets/summit.webp", name:"Summit" },
+    tashi:            { video:"assets/village.mp4",   poster:"assets/village.webp",   name:"Village" },
+    lhamo:            { video:"assets/bridge.mp4",    poster:"assets/bridge.webp",    name:"Rope Bridge" },
+    norbu:            { video:"assets/monastery.mp4", poster:"assets/monastery.webp", name:"Monastery" },
+    yeshi:            { video:"assets/lake.mp4",      poster:"assets/lake.webp",      name:"Frozen Lake" },
+    pema:             { video:"assets/pinegrove.mp4", poster:"assets/pinegrove.webp", name:"Pine Grove" },
+    karma:            { video:"assets/icecave.mp4",   poster:"assets/icecave.webp",   name:"Ice Cave" },
+    drogpa:           { video:"assets/cliff.mp4",     poster:"assets/cliff.webp",     name:"Cliff" },
+    tenzin:           { video:"assets/blizzard.mp4",  poster:"assets/blizzard.webp",  name:"Blizzard Pass" },
+    "the-mountain":   { video:"assets/summit.mp4",    poster:"assets/summit.webp",    name:"Summit" },
+    "the-veiled-one": { video:"assets/veil.mp4",      poster:"assets/veil.webp",      name:"Beyond the Veil" },
   };
   let activeBg = "A";              // which of (A,B) is currently visible
   let currentArenaId = "tashi";    // already-loaded into A at boot
@@ -761,8 +1046,45 @@
   const $ = id => document.getElementById(id);
 
   let state = null, ladderIndex = 0, busy = false;
+  // match_id is minted server-side on round 1 of each fight and echoed back
+  // in /ai_turn responses. We persist it on `state` so subsequent rounds
+  // reuse the same id (one live-traces file per fight), and snapshot it into
+  // `lastMatchId` before state resets so /submit_run can close the session.
+  let lastMatchId = null;
+  // self-play mode: when on, the UI auto-commits both sides each round via
+  // /player_turn + /ai_turn — the human is just watching. Toggled by the
+  // "Watch self-play" button on the intro card (shown only when the backend
+  // reports META.selfplay.enabled = true).
+  let selfplayMode = false;
+  let lastStatus = null;
   $("backend").textContent = "opponent: " + META.backend;
-  renderPips();
+  renderPips(); renderLadder();
+
+  // --------------------------------------------------------------------
+  // Run tracking. A "run" is one attempt at the whole ladder (Tashi →
+  // Mountain). The leaderboard ranks summit clears by total turns then
+  // total seconds. Per-level rows go to the dataset for analytics.
+  // --------------------------------------------------------------------
+  let identity = { username:"", signed_in:false, source:"guest", login_url:null, on_space:false };
+  let runStart = 0, levelStart = 0;
+  let runTurns = 0, levelTurns = 0;
+  let perLevel = [];
+  let runActive = false;
+
+  function resetRun(){
+    runStart = Date.now(); runTurns = 0; perLevel = []; runActive = true;
+  }
+  function resetLevel(){
+    levelStart = Date.now(); levelTurns = 0;
+  }
+  function pushLevel(opp, won){
+    perLevel.push({
+      opponent_id: opp.id,
+      turns: levelTurns,
+      seconds: +((Date.now() - levelStart) / 1000).toFixed(2),
+      won: !!won,
+    });
+  }
 
   const PLAYER_PALETTE = { robe:"#3f7d5a", trim:"#e8a13a", skin:"#d4a373", hair:"#1c1a17", sash:"#c0473b", aura:"#e8a13a" };
   function paletteFor(opponent){
@@ -797,36 +1119,27 @@
   let playerPalette = PLAYER_PALETTE;
   let oppPalette = paletteFor(META.ladder[0]);
 
-  // --------------------------------------------------------------------
-  // Run tracking. A "run" is one attempt at the whole ladder (Tashi →
-  // Mountain). The leaderboard ranks summit clears by total turns then
-  // total seconds. Per-level rows go to the dataset for analytics.
-  // --------------------------------------------------------------------
-  let identity = { username:"", signed_in:false, source:"guest", login_url:null, on_space:false };
-  let runStart = 0, levelStart = 0;
-  let runTurns = 0, levelTurns = 0;
-  let perLevel = [];
-  let runActive = false;
-
-  function resetRun(){
-    runStart = Date.now(); runTurns = 0; perLevel = []; runActive = true;
-  }
-  function resetLevel(){
-    levelStart = Date.now(); levelTurns = 0;
-  }
-  function pushLevel(opp, won){
-    perLevel.push({
-      opponent_id: opp.id,
-      turns: levelTurns,
-      seconds: +((Date.now() - levelStart) / 1000).toFixed(2),
-      won: !!won,
-    });
-  }
-
   function renderPips(){
     const p = $("pips"); p.innerHTML = "";
     META.ladder.forEach((o,i) => {
       const d = document.createElement("div"); d.className = "pip" + (i < ladderIndex ? " on" : ""); p.appendChild(d);
+    });
+  }
+
+  /* leaderboard: 5 champions in the right rail, with defeated/current/locked states */
+  function renderLadder(){
+    const l = $("ladder"); if (!l) return;
+    l.innerHTML = "";
+    META.ladder.forEach((o,i) => {
+      const state = i < ladderIndex ? "defeated" : i === ladderIndex ? "current" : "locked";
+      const el = document.createElement("div");
+      el.className = "ladder-item " + state;
+      el.innerHTML = `
+        <div class="idx"><span>${i+1}</span></div>
+        <div class="who"><div class="nm">${o.name}</div><div class="ti">${o.title}</div></div>
+        <div class="dot" style="${state==="current"?"":`background:${o.accent}; box-shadow:0 0 8px ${o.accent}`}"></div>
+      `;
+      l.appendChild(el);
     });
   }
 
@@ -837,6 +1150,8 @@
     resetLevel();
 
     const opp = META.ladder[ladderIndex];
+    // Crossfade to this opponent's arena — but only if the user hasn't
+    // pinned a specific arena via the Tweaks panel.
     if (!TWEAKS.arena) crossfadeTo(opp.id);
     document.documentElement.style.setProperty("--accent", opp.accent);
     oppPalette = paletteFor(opp);
@@ -848,7 +1163,7 @@
     $("scrollLabel").textContent = "the mind of " + opp.name;
     $("plSprite").innerHTML = spriteSVG("idle", playerPalette);
     $("oppSprite").innerHTML = spriteSVG("idle", oppPalette);
-    $("fx").innerHTML = ""; renderMoves(); renderState(); renderPips();
+    $("fx").innerHTML = ""; renderMoves(); renderState(); renderPips(); renderLadder();
   }
 
   function renderMoves(){
@@ -882,6 +1197,12 @@
     if (busy || !state) return;
     busy = true; renderMoves();
     levelTurns++; runTurns++;
+    // flash the just-picked move so user sees their commit landed
+    const justPicked = document.querySelector(`.mv[data-move="${playerMove}"]`);
+    if (justPicked) {
+      justPicked.classList.add("just-picked");
+      setTimeout(() => justPicked && justPicked.classList.remove("just-picked"), 520);
+    }
     $("taunt").style.display = "none";
     $("think").className = "think reading"; $("think").textContent = "reading your pattern";
     state.player_move = playerMove;
@@ -899,10 +1220,46 @@
     state.player_hp = data.player_hp; state.ai_hp = data.ai_hp;
     state.player_prana = data.player_prana; state.ai_prana = data.ai_prana;
     state.history = data.history; state.round += 1;
+    state.match_id = data.match_id || state.match_id;
+    lastMatchId = state.match_id || lastMatchId;
+    lastStatus = data.status;
     delete state.player_move; renderState();
     data.log.forEach(line => addLog(line));
     if (data.status !== "continue"){ busy=false; return endRound(data); }
     busy = false; renderMoves();
+    // In self-play, chain into the next round automatically. The small
+    // delay lets the player read the mind-scroll and watch the animation.
+    if (selfplayMode) setTimeout(selfplayCommit, 1100);
+  }
+
+  /* ============================================================
+     SELF-PLAY DRIVER
+     Each round, ask /player_turn for the player teacher's blind-commit
+     move (which it picked from history alone), then route that move
+     through the normal commit() path so the existing /ai_turn flow
+     resolves the round and animates as usual.
+     ============================================================ */
+  async function selfplayCommit(){
+    if (!selfplayMode || busy || !state) return;
+    let pData;
+    try {
+      if (!client) client = await Client.connect(window.location.origin);
+      const res = await client.predict("/player_turn", { state_json: JSON.stringify(state) });
+      pData = JSON.parse(res.data[0]);
+    } catch (e) {
+      addLog(`<i>self-play stopped: ${e.message || e}</i>`);
+      selfplayMode = false; return;
+    }
+    if (pData.error){
+      addLog(`<i>self-play error: ${pData.error}</i>`);
+      selfplayMode = false; return;
+    }
+    // Surface the player teacher's mind to the log — keeps the footer
+    // mind-scroll for the opponent (the canonical "your mind" of the game)
+    // while still letting the watcher see both sides reason.
+    const trimmed = String(pData.reasoning || "").slice(0, 240);
+    addLog(`<b>You (${pData.move})</b>: <i>${escapeHtml(trimmed)}</i>`);
+    commit(pData.move);  // not awaited — commit() chains itself via the auto-advance above
   }
 
   async function reveal(playerMove, data){
@@ -942,7 +1299,12 @@
   function impactAt(victimSide){
     const i = document.createElement("div"); i.className = "impact";
     i.style.left = victimSide === "left" ? "20%" : "80%"; i.style.bottom = "100px";
-    $("fx").appendChild(i); setTimeout(()=>i.remove(), 470);
+    $("fx").appendChild(i); setTimeout(()=>i.remove(), 530);
+    // screen-shake the whole duel arena so hits have weight
+    const stage = $("stage");
+    stage.classList.remove("shake-screen"); void stage.offsetWidth;
+    stage.classList.add("shake-screen");
+    setTimeout(() => stage.classList.remove("shake-screen"), 460);
   }
   function showBanner(playerLabel, aiLabel){
     const old = document.querySelector(".move-banner"); if (old) old.remove();
@@ -969,15 +1331,18 @@
 
     if (data.status === "advance"){
       pushLevel(opp, true);
-      ladderIndex++; renderPips();
+      ladderIndex++; renderPips(); renderLadder();
       const nxt = META.ladder[ladderIndex];
       $("cardEm").textContent = nxt.glyph; $("cardTitle").textContent = `${opp.name} falls`;
       $("cardSub").textContent = `next: ${nxt.name}, ${nxt.title}`; $("cardBio").textContent = nxt.bio;
       $("cardBtn").textContent = "Face " + nxt.name;
       $("cardBtn").onclick = () => { o.classList.add("hide"); newFight(); };
+      // self-play: auto-click "Face Next" after a short pause so the watcher
+      // can read the result card before the next match starts.
+      if (selfplayMode) setTimeout(() => $("cardBtn").click(), 1800);
     } else if (data.status === "ladder_clear"){
       pushLevel(opp, true);
-      ladderIndex = META.ladder.length; renderPips();
+      ladderIndex = META.ladder.length; renderPips(); renderLadder();
       $("cardEm").textContent = "✦"; $("cardTitle").textContent = "The summit is yours";
       $("cardSub").textContent = "you out-read every champion of the mist";
       $("cardBio").textContent = "You climbed the whole mountain by predicting minds that were predicting yours.";
@@ -1041,6 +1406,10 @@
       total_seconds: +((Date.now() - runStart) / 1000).toFixed(2),
       per_level: perLevel,
       won: !!won,
+      // close out the live-traces capture for the just-finished match so
+      // its JSONL gets a match_end marker (cron uploader skips unsealed
+      // files). lastMatchId is set in commit() before state resets.
+      match_id: lastMatchId,
     };
     if (!identity.signed_in) {
       try { localStorage.setItem("mist:name", payload.username); } catch (_) {}
@@ -1108,6 +1477,24 @@
   loadIdentity();
   const wait = ms => new Promise(r => setTimeout(r, ms));
   $("cardBtn").onclick = () => { $("overlay").classList.add("hide"); newFight(); };
+
+  // Self-play button is wired and shown only when the backend reports
+  // SELFPLAY_MODE=1 (META.selfplay.enabled). Clicking it starts a watch-mode
+  // match: the human takes their hands off, the loop auto-commits both
+  // sides each round via /player_turn + /ai_turn.
+  if (META.selfplay && META.selfplay.enabled){
+    const spBtn = $("cardBtnSelfplay");
+    spBtn.style.display = "";
+    spBtn.title = `${META.selfplay.player_teacher} vs ${META.selfplay.opponent_teacher}`;
+    spBtn.onclick = () => {
+      selfplayMode = true;
+      // hide the identity block — no human is competing in self-play
+      $("identBlock").style.display = "none";
+      $("overlay").classList.add("hide");
+      newFight();
+      setTimeout(selfplayCommit, 900);
+    };
+  }
 </script>
 </body>
 </html>
