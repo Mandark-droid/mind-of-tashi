@@ -33,6 +33,14 @@ MODEL_FILE = os.environ.get("MODEL_FILE", "Qwen3-4B-Q4_K_M.gguf")
 N_CTX = int(os.environ.get("MODEL_N_CTX", "4096"))
 N_THREADS = int(os.environ.get("MODEL_N_THREADS", str(os.cpu_count() or 4)))
 FORCE_MOCK = os.environ.get("FORCE_MOCK", "0") == "1"
+# llama.cpp only exposes per-token logprobs (the Conviction Meter, §E1) when the
+# context is built with logits_all=True. It costs extra compute/RAM (logits for
+# every token, not just the sampled one), so it's switchable for constrained
+# Spaces — but ON by default because the meter is a headline feature. When off,
+# the meter degrades to the labelled "estimate" path.
+LOGITS_ALL = os.environ.get("LOGITS_ALL", "1") == "1"
+# How many top alternatives to pull per token for the entropy-based conviction.
+CONVICTION_TOPK = int(os.environ.get("CONVICTION_TOPK", "5"))
 
 
 class Reasoner:
@@ -43,7 +51,7 @@ class Reasoner:
             return
         try:
             from llama_cpp import Llama  # noqa: WPS433
-            self.llm = Llama.from_pretrained(
+            common = dict(
                 repo_id=MODEL_REPO,
                 filename=MODEL_FILE,
                 n_ctx=N_CTX,
@@ -51,6 +59,15 @@ class Reasoner:
                 n_gpu_layers=int(os.environ.get("N_GPU_LAYERS", "0")),  # 0 = CPU-only, the reliable path on Spaces
                 verbose=False,
             )
+            if LOGITS_ALL:
+                try:
+                    self.llm = Llama.from_pretrained(logits_all=True, **common)
+                except TypeError as exc:  # logits_all removed in some builds
+                    print(f"[llm] logits_all unsupported ({exc}); Conviction Meter "
+                          "degrades to estimate")
+                    self.llm = Llama.from_pretrained(**common)
+            else:
+                self.llm = Llama.from_pretrained(**common)
             self.backend = "llama.cpp"
         except Exception as exc:  # llama_cpp missing, or model not fetched yet
             print(f"[llm] falling back to mock opponent: {exc}")
@@ -104,10 +121,13 @@ class Reasoner:
             temperature=0.7 + 0.05 * (5 - opp.difficulty),  # brawlers run hotter
             top_p=0.9,
         )
-        # Ask for logprobs in whichever dialect this llama-cpp build speaks:
-        # OpenAI-style (bool + top_logprobs) first, then the integer form, then
-        # bare. Any failure just degrades the Conviction Meter to an estimate.
-        for kwargs in ({"logprobs": True, "top_logprobs": 1}, {"logprobs": 1}, {}):
+        # Ask for the top-K logprob distribution per token (K via CONVICTION_TOPK)
+        # so conviction can be measured as distribution entropy, not just the
+        # emitted token's probability. Try whichever dialect this llama-cpp build
+        # speaks: OpenAI-style (bool + top_logprobs) first, then the integer
+        # form, then bare. Any failure degrades the meter to an estimate.
+        k = CONVICTION_TOPK
+        for kwargs in ({"logprobs": True, "top_logprobs": k}, {"logprobs": k}, {}):
             try:
                 return self.llm.create_chat_completion(**base, **kwargs)
             except (TypeError, ValueError) as exc:
@@ -133,12 +153,14 @@ def _synthesize_raw(parsed: Dict) -> str:
 #   {score, decision_score, think_score, source, peak:{i,t}|None,
 #    tokens:[{t, c}]}   where c = per-token conviction 0..100
 # ------------------------------------------------------------------------- #
-def _iter_token_logprobs(out: Dict) -> Iterator[Tuple[str, float]]:
-    """Yield (token_text, logprob) from whichever logprobs shape we got.
+def _iter_token_dists(out: Dict) -> Iterator[Tuple[str, float, List[Tuple[str, float]]]]:
+    """Yield (token_text, token_logprob, top_alternatives) per generated token.
 
-    Handles both the OpenAI-style chat shape
-    (``choices[0].logprobs.content = [{token, logprob}, ...]``) and the older
-    llama.cpp completion shape (``{tokens:[...], token_logprobs:[...]}``).
+    ``top_alternatives`` is a list of (token, logprob) for the top-K candidates
+    at that step (possibly empty). Handles both the OpenAI-style chat shape
+    (``choices[0].logprobs.content = [{token, logprob, top_logprobs:[...]}]``)
+    and the older llama.cpp completion shape
+    (``{tokens, token_logprobs, top_logprobs:[{tok: lp}, ...]}``).
     """
     try:
         choice = out["choices"][0]
@@ -151,14 +173,47 @@ def _iter_token_logprobs(out: Dict) -> Iterator[Tuple[str, float]]:
     if content:
         for item in content:
             val = item.get("logprob")
-            if val is not None:
-                yield str(item.get("token", "")), float(val)
+            if val is None:
+                continue
+            top = [
+                (str(t.get("token", "")), float(t["logprob"]))
+                for t in (item.get("top_logprobs") or [])
+                if t.get("logprob") is not None
+            ]
+            yield str(item.get("token", "")), float(val), top
         return
-    toks, tlps = lp.get("tokens"), lp.get("token_logprobs")
+    toks, tlps, tops = lp.get("tokens"), lp.get("token_logprobs"), lp.get("top_logprobs")
     if toks and tlps and len(toks) == len(tlps):
-        for tok, val in zip(toks, tlps):
-            if val is not None:
-                yield str(tok), float(val)
+        for i, (tok, val) in enumerate(zip(toks, tlps)):
+            if val is None:
+                continue
+            top: List[Tuple[str, float]] = []
+            if tops and i < len(tops) and isinstance(tops[i], dict):
+                top = [(str(kk), float(vv)) for kk, vv in tops[i].items() if vv is not None]
+            yield str(tok), float(val), top
+
+
+def _token_conviction(token_lp: float, top: List[Tuple[str, float]]) -> int:
+    """Per-token conviction 0..100.
+
+    Primary signal = how *concentrated* the model's belief was over the top-K
+    alternatives: 1 - normalised Shannon entropy (peaked distribution → high
+    conviction, torn distribution → low). Falls back to the emitted token's
+    own probability when no distribution is available (e.g. top_logprobs=1 or
+    a build that omits it).
+    """
+    probs = [math.exp(lp) for _, lp in top if lp is not None]
+    probs = [p for p in probs if p > 0.0]
+    if len(probs) >= 2:
+        s = sum(probs)
+        if s > 0.0:
+            probs = [p / s for p in probs]
+            h = -sum(p * math.log2(p) for p in probs if p > 0.0)
+            hmax = math.log2(len(probs))
+            conf = 1.0 - (h / hmax if hmax > 0.0 else 0.0)
+            return int(round(max(0.0, min(1.0, conf)) * 100))
+    p0 = math.exp(token_lp)
+    return int(round(max(0.0, min(1.0, p0)) * 100))
 
 
 def _conviction_from_completion(out: Dict, move_id: str | None) -> Dict | None:
@@ -169,18 +224,16 @@ def _conviction_from_completion(out: Dict, move_id: str | None) -> Dict | None:
     ``tokens`` carries the per-token confidence of the <think> block so the UI
     can tint the mind-scroll, and ``peak`` marks the single most-hesitant word.
     """
-    pairs = list(_iter_token_logprobs(out))
+    pairs = list(_iter_token_dists(out))
     if not pairs:
         return None
 
     spans = []  # [start, end, token_text, conviction_pct]
     text = ""
-    for tok, lp in pairs:
+    for tok, lp, top in pairs:
         start = len(text)
         text += tok
-        prob = math.exp(lp)
-        prob = 0.0 if prob < 0 else (1.0 if prob > 1 else prob)
-        spans.append([start, len(text), tok, int(round(prob * 100))])
+        spans.append([start, len(text), tok, _token_conviction(lp, top)])
 
     ti, tc = text.find("<think>"), text.find("</think>")
     think_lo = (ti + len("<think>")) if ti != -1 else 0
@@ -207,9 +260,14 @@ def _conviction_from_completion(out: Dict, move_id: str | None) -> Dict | None:
 
     think_convs = [tt["c"] for tt in think_tokens] or [c for *_, c in spans]
 
-    # peak hesitation = lowest-confidence *wordy* think token (skip whitespace/punct)
+    # peak hesitation = lowest-confidence *wordy* think token. Prefer tokens with
+    # >=2 letters so the "she wavered" flash lands on a real word, not a stray
+    # sub-word fragment ("v", "i"); fall back to any alpha token if none qualify.
     peak = None
-    wordy = [(i, tt) for i, tt in enumerate(think_tokens) if any(ch.isalpha() for ch in tt["t"])]
+    _alpha = lambda s: sum(ch.isalpha() for ch in s)
+    wordy = [(i, tt) for i, tt in enumerate(think_tokens) if _alpha(tt["t"]) >= 2]
+    if not wordy:
+        wordy = [(i, tt) for i, tt in enumerate(think_tokens) if _alpha(tt["t"]) >= 1]
     if wordy:
         i, tt = min(wordy, key=lambda it: it[1]["c"])
         peak = {"i": i, "t": tt["t"].strip()}
