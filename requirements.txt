@@ -5,7 +5,11 @@
 # gradio releases. Installing both here keeps `pip install -r requirements.txt`
 # self-sufficient for local dev; on Spaces, the sdk_version in README.md also
 # pins the gradio runtime.
-gradio>=6.10
+# Track Gradio 6.15+ — major perf improvements landed late May 2026 and we
+# want to be among the early adopters in the Hub-side gradio-hackathon-all-
+# stars community. Files filed early bugs (if any) for credit; the README
+# frontmatter pins sdk_version: 6.15.0 to match the deployed Space runtime.
+gradio>=6.15
 fastapi>=0.115
 
 # Opponent runtime: a small reasoning model via llama.cpp.

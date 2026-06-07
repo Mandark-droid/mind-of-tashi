@@ -15,8 +15,18 @@ from __future__ import annotations
 import json
 from typing import Dict, List
 
-from engine import MOVES
+from engine import COMBOS, MOVES
 from opponents import Opponent
+
+# Gradio 6.15's `cache` decorator for memoising hot pure functions. Falls back
+# to functools.lru_cache when running under an older gradio (or with gradio
+# absent — used by tools/selfplay.py in environments that don't import gradio).
+try:
+    from gradio import cache as _gr_cache  # type: ignore
+except ImportError:  # pragma: no cover
+    from functools import lru_cache as _lru
+    def _gr_cache(max_size: int = 128, **_kwargs):  # noqa: D401
+        return _lru(maxsize=max_size)
 
 MOVE_REFERENCE = "\n".join(
     f'    {mid}: {m["label"]} (cost {m["cost"]} prana) — {m["blurb"]}'
@@ -24,6 +34,43 @@ MOVE_REFERENCE = "\n".join(
 )
 
 
+def _combo_reference() -> str:
+    """Render the COMBOS table as a prompt-friendly block.
+
+    The combos are HIDDEN from the player's UI move list (players discover
+    them by playing or reading the source), but the model trains and reasons
+    against them — they're part of the duelist's craft. The model is free
+    to set up a combo and to name it inside <think>; the player will see the
+    combo name announced in the round log when it fires.
+    """
+    lines = []
+    for seq, cdef in COMBOS.items():
+        m1, m2, m3 = seq
+        effect_bits = []
+        if cdef.get("bonus_dmg"):
+            effect_bits.append(f"+{cdef['bonus_dmg']} damage")
+        if cdef.get("ignore_guard_halving"):
+            effect_bits.append("ignores GUARD halving")
+        if cdef.get("pierces_guard"):
+            effect_bits.append("treats GUARD as no defense")
+        if cdef.get("drain_prana"):
+            effect_bits.append(f"drains {cdef['drain_prana']} prana from opponent")
+        effect = ", ".join(effect_bits) or "no mechanical effect"
+        lines.append(
+            f"  - {cdef['name']:<18}  {m1} -> {m2} -> {m3:<10}  ({effect})\n"
+            f"    {cdef['blurb']}"
+        )
+    return "\n".join(lines)
+
+
+COMBO_REFERENCE = _combo_reference()
+
+
+# Cache per persona — there are 10 ladder personas; we cap at 32 to leave room
+# for future community-authored opponents without unbounded growth. The function
+# is pure in `opp` (all referenced fields are frozen dataclass attributes) so
+# content-hashing on the dataclass repr is safe.
+@_gr_cache(max_size=32)
 def build_system(opp: Opponent) -> str:
     return f"""You are {opp.name}, {opp.title} — a duelist of the Village Hidden in the Mist, high in the Himalayas.
 
@@ -47,6 +94,14 @@ KEY READS
 - PRANA ART is heavy but telegraphed; a MIST-STEP eats it alive.
 - MIST-STEP only rewards you if they ATTACK this turn. Against caution it whiffs and
   wastes prana. So Mist-Step is a BET that they will attack.
+
+HIDDEN COMBOS (your inner craft — these are not in the move list the challenger sees)
+The third move of a recognised three-move sequence ignites a named combo. You can
+set one up over two earlier rounds and finish it on the third. A successful read
+(Mist-Step) by the opponent still negates the trigger move's damage, so combos are
+power moves but not invincible. You may name a combo you are setting up or landing
+inside your <think> block — that is part of the craft, not a leak.
+{COMBO_REFERENCE}
 
 YOUR JOB EACH ROUND
 Think briefly, in character, about what your challenger is likely to do THIS round

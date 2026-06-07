@@ -317,9 +317,12 @@
     z-index:2; pointer-events:none; overflow:hidden;
   }
 
-  /* fighter slots — relative to .duel. Bigger sprites. */
+  /* fighter slots — relative to .duel. A1: bumped ~30% larger so the
+   * fighters dominate the arena rather than reading small against the
+   * cinematic backdrop. Was 240x300; now 312x390. The flex centering
+   * keeps the sprite anchored to the bottom of the slot regardless. */
   .slot{
-    position:absolute; bottom:6%; width:240px; height:300px;
+    position:absolute; bottom:6%; width:312px; height:390px;
     display:flex; align-items:flex-end; justify-content:center;
     pointer-events:none;
   }
@@ -372,13 +375,87 @@
     z-index:1;
   }
   .sprite{
-    width:190px; height:240px;
+    /* A1: scaled up 30% (was 190x240). The drop-shadow gets a touch
+     * heavier to compensate for the bigger silhouette. */
+    width:247px; height:312px;
     image-rendering:pixelated; image-rendering:crisp-edges;
     transition:transform .35s cubic-bezier(.2,.8,.2,1), filter .3s, opacity .3s;
     position:relative; z-index:2;
-    filter:drop-shadow(0 8px 12px rgba(0,0,0,.7));
+    filter:drop-shadow(0 10px 14px rgba(0,0,0,.72));
+    /* Idle breathing: subtle Y-scale oscillation. Only plays when no
+     * .pose-* class is active (pose animations override via their own
+     * animation: rule, which has priority). */
+    animation: idleBreathe 5.2s ease-in-out infinite;
+    transform-origin: center bottom;
   }
-  .slot.right .sprite{transform:scaleX(-1)}
+  .slot.right .sprite{transform:scaleX(-1); animation: idleBreatheR 5.2s ease-in-out infinite}
+  @keyframes idleBreathe{
+    0%,100% { transform: translateY(0) scaleY(1) scaleX(1); }
+    50%     { transform: translateY(-1px) scaleY(1.018) scaleX(.992); }
+  }
+  @keyframes idleBreatheR{
+    0%,100% { transform: translateY(0) scaleY(1) scaleX(-1); }
+    50%     { transform: translateY(-1px) scaleY(1.018) scaleX(-.992); }
+  }
+  /* A1: prana-rise flicker. Briefly tints the sprite gold + softly
+   * glows when prana increases. Class added by JS in renderState and
+   * removed after the keyframe completes (~900 ms). */
+  .sprite.prana-rise{
+    animation: pranaRise .9s ease-out;
+    filter:drop-shadow(0 10px 14px rgba(0,0,0,.72))
+           drop-shadow(0 0 14px rgba(232,161,58,.65));
+  }
+  @keyframes pranaRise{
+    0%   { filter:drop-shadow(0 10px 14px rgba(0,0,0,.72)); }
+    30%  { filter:drop-shadow(0 10px 14px rgba(0,0,0,.72))
+                  drop-shadow(0 0 22px rgba(232,161,58,.95)); }
+    100% { filter:drop-shadow(0 10px 14px rgba(0,0,0,.72)); }
+  }
+
+  /* A3: ambient wind gusts. A translucent horizontal streak sweeps
+   * across the arena periodically — fires more often as the weather
+   * intensifies (see .duel.weather-flurry / .weather-blizzard rules
+   * below). Pure CSS; no JS animation loop. */
+  .gust{
+    position:absolute; top:18%; height:9%; left:-12%;
+    width:24%; pointer-events:none; z-index:3;
+    background:linear-gradient(90deg,
+      transparent 0%,
+      rgba(232,238,247,.0) 6%,
+      rgba(232,238,247,.22) 50%,
+      rgba(232,238,247,.0) 94%,
+      transparent 100%);
+    filter:blur(4px);
+    opacity:0;
+  }
+  .duel .gust.go{ animation: gustSweep 3.4s cubic-bezier(.3,.4,.2,1); }
+  @keyframes gustSweep{
+    0%   { transform:translateX(0)    skewX(-8deg); opacity:0; }
+    15%  { opacity:.85; }
+    100% { transform:translateX(540%) skewX(-8deg); opacity:0; }
+  }
+
+  /* A3: weather progression. Classes added by JS based on round count.
+   * The flurry tier increases snow opacity + adds occasional gust auto-
+   * play; the blizzard tier pushes both further and adds a slow
+   * horizontal drift to the whole snow column. */
+  .duel.weather-flurry .snow{ opacity:1; }
+  .duel.weather-flurry .snow .flake{ filter:brightness(1.15); }
+  .duel.weather-blizzard .snow{ opacity:1; }
+  .duel.weather-blizzard .snow .flake{
+    filter:brightness(1.3);
+    animation-duration: 2.6s !important;  /* faster fall */
+  }
+  .duel.weather-blizzard{
+    /* subtle desaturate + cool tint when the storm sets in */
+    filter:saturate(.92) hue-rotate(-4deg);
+    transition: filter 4s ease-out;
+  }
+  /* Accessibility: leave the storm in place but stop the gust sweeps for
+   * users who opted out of motion. */
+  @media (prefers-reduced-motion: reduce){
+    .duel .gust.go{ animation:none !important; opacity:0 !important; }
+  }
 
   /* ---- FOOTER MIND-SCROLL ------------------------------------------ */
   .footer-scroll{
@@ -417,6 +494,71 @@
     .hp-corner.opp{right:8px; top:60px}
     .footer-scroll{position:static; backdrop-filter:none; padding:10px}
     .duel{bottom:0}
+  }
+
+  /* ==== HELP MODAL ====================================================
+   * Rules + moves catalogue + ladder tease. Reuses the .ov / .card
+   * skeleton so it sits over the duel correctly; .help-card overrides
+   * dimensions so the rules panel has room to breathe. */
+  .help-card{ max-width:760px; width:100%; text-align:left; padding:24px 28px;
+    border-left:3px solid var(--ember); }
+  .help-head{ display:flex; align-items:center; justify-content:space-between; gap:12px;
+    margin-bottom:14px; border-bottom:1px solid var(--line); padding-bottom:14px; }
+  .help-head .deva{ font-family:"Eczar"; font-weight:600; color:var(--ember);
+    font-size:11px; letter-spacing:.22em }
+  .help-head h2{ font-family:"Eczar"; font-weight:700; font-size:22px; flex:1 1 auto;
+    text-align:center; margin:0 8px; }
+  .help-close{ background:transparent; border:1px solid var(--line); color:var(--bone-dim);
+    width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:20px; line-height:1;
+    display:flex; align-items:center; justify-content:center; padding:0; }
+  .help-close:hover{ color:var(--bone); border-color:var(--bone-dim); }
+  .help-tabs{ display:flex; gap:6px; margin-bottom:18px; }
+  .help-tab{ flex:1 1 0; background:rgba(13,17,23,.5); border:1px solid var(--line);
+    color:var(--bone-dim); padding:8px 10px; border-radius:8px; cursor:pointer;
+    font-family:"VT323", monospace; font-size:16px; letter-spacing:.12em; transition:.18s; }
+  .help-tab:hover{ color:var(--bone); border-color:var(--accent); }
+  .help-tab.active{ color:var(--bone); border-color:var(--ember);
+    background:linear-gradient(180deg, rgba(232,161,58,.13), rgba(232,161,58,.04)); }
+  .help-panel{ display:none; max-height:60vh; overflow-y:auto; padding-right:6px; }
+  .help-panel.active{ display:block; }
+  .help-foot{ display:flex; align-items:center; justify-content:space-between; gap:12px;
+    margin-top:18px; padding-top:14px; border-top:1px solid var(--line);
+    font-size:12px; color:var(--bone-dim); }
+  /* rules tab — bullet-row layout */
+  .rule{ display:grid; grid-template-columns:64px 1fr; gap:12px; align-items:start;
+    margin-bottom:14px; line-height:1.55; font-size:14.5px; color:var(--bone); }
+  .rule-em{ font-size:22px; color:var(--ember); text-align:center; padding-top:1px;
+    line-height:1.1; }
+  .rule code{ background:rgba(232,161,58,.10); color:var(--ember-2); border-radius:4px;
+    padding:1px 6px; font-family:"VT323",monospace; font-size:14px; letter-spacing:.04em; }
+  /* moves tab — 2-column card grid */
+  .moves-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .move-card{ background:rgba(13,17,23,.6); border:1px solid var(--line);
+    border-left:3px solid var(--accent); border-radius:10px; padding:12px 14px; }
+  .move-card .head{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .move-card .glyph{ font-size:22px; color:var(--ember-2); }
+  .move-card .name{ font-family:"Eczar"; font-weight:700; font-size:16px; color:var(--bone); }
+  .move-card .cost{ margin-left:auto; font-family:"VT323",monospace; font-size:13px;
+    color:var(--bone-dim); letter-spacing:.08em; }
+  .move-card .blurb{ font-size:13.5px; color:var(--bone-dim); line-height:1.5; }
+  .move-card.kind-attack{ border-left-color:var(--crimson); }
+  .move-card.kind-defend{ border-left-color:var(--accent); }
+  .move-card.kind-gather{ border-left-color:var(--ember); }
+  .move-card.kind-read  { border-left-color:#a45cd0; }
+  .moves-foot{ margin-top:10px; font-size:12.5px; color:var(--bone-dim); }
+  /* personas tab — small ladder card grid */
+  .ladder-tease{ display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:10px; }
+  .ladder-tease .row{ background:rgba(13,17,23,.55); border:1px solid var(--line);
+    border-radius:10px; padding:10px 12px; display:flex; align-items:center; gap:10px; }
+  .ladder-tease .g{ font-size:24px; }
+  .ladder-tease .nm{ font-family:"Eczar"; font-weight:600; color:var(--bone); }
+  .ladder-tease .ti{ font-family:"Mukta", sans-serif; font-style:italic;
+    font-size:12px; color:var(--bone-dim); display:block; }
+  @media (max-width:720px){
+    .moves-grid{ grid-template-columns:1fr; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .help-tab, .help-close{ transition:none !important; }
   }
 
   /* ==== OVERLAY (intro/end-of-round card) — unchanged ==================== */
@@ -569,8 +711,14 @@
   }
   @keyframes impactPop{0%{opacity:0; transform:translate(-50%,-50%) scale(.2)}25%{opacity:1; transform:translate(-50%,-50%) scale(1)}100%{opacity:0; transform:translate(-50%,-50%) scale(1.8)}}
   @keyframes impactRing{0%{opacity:0; transform:scale(.5)}30%{opacity:1}100%{opacity:0; transform:scale(2.6)}}
-  /* screen-shake on heavy hits */
+  /* screen-shake on heavy hits — three tiers scaled by damage class. The
+   * existing .shake-screen is kept as the default (normal hit) for backwards
+   * compatibility; .shake-heavy and .shake-crit ramp the amplitude. The
+   * crit tier also pulls slightly inward via the zoom keyframe to suggest
+   * a camera punch. Honour prefers-reduced-motion: drop all shakes. */
   .duel.shake-screen{animation:bigShake .42s ease-out}
+  .duel.shake-heavy{animation:bigShakeHeavy .55s ease-out}
+  .duel.shake-crit{animation:bigShakeCrit .7s ease-out}
   @keyframes bigShake{
     0%,100%{ transform:translate(0,0) }
     10%{ transform:translate(-4px, 2px) }
@@ -580,6 +728,51 @@
     60%{ transform:translate(-2px, 3px) }
     75%{ transform:translate(2px,-1px) }
     90%{ transform:translate(-1px, 0) }
+  }
+  @keyframes bigShakeHeavy{
+    0%,100%{ transform:translate(0,0) scale(1) }
+    10%{ transform:translate(-7px, 4px) scale(1.012) }
+    20%{ transform:translate(6px,-7px) scale(1.012) }
+    35%{ transform:translate(-6px,-5px) scale(1.008) }
+    50%{ transform:translate(7px, 4px) scale(1.005) }
+    65%{ transform:translate(-4px, 5px) scale(1.003) }
+    80%{ transform:translate(3px,-2px) scale(1.002) }
+    92%{ transform:translate(-1px, 0) scale(1) }
+  }
+  @keyframes bigShakeCrit{
+    0%,100%{ transform:translate(0,0) scale(1) }
+    8%{ transform:translate(-11px, 6px) scale(1.02) }
+    18%{ transform:translate(10px,-10px) scale(1.022) }
+    32%{ transform:translate(-10px,-9px) scale(1.018) }
+    48%{ transform:translate(11px, 7px) scale(1.012) }
+    65%{ transform:translate(-7px, 8px) scale(1.008) }
+    80%{ transform:translate(5px,-4px) scale(1.004) }
+    95%{ transform:translate(-2px, 0) scale(1) }
+  }
+  /* KO slow-mo: brief filter + ease, applied to the stage when a fighter
+   * goes to 0 HP. Reads as the moment hangs. ~600 ms total; no JS animation
+   * library needed, just a class toggle. */
+  .duel.slow-mo{ animation:slowMoPunch .9s cubic-bezier(.2,.7,.2,1) }
+  @keyframes slowMoPunch{
+    0%   { filter:contrast(1)   saturate(1)   brightness(1);   transform:scale(1) }
+    10%  { filter:contrast(1.3) saturate(1.4) brightness(.92); transform:scale(1.035) }
+    35%  { filter:contrast(1.25) saturate(1.3) brightness(.95); transform:scale(1.03) }
+    100% { filter:contrast(1)   saturate(1)   brightness(1);   transform:scale(1) }
+  }
+  /* Brief commit zoom — fires on showBanner so the move reveal carries
+   * weight. Subtler than shake; signals "the camera leans in". */
+  .duel.commit-zoom{ animation:commitZoom .55s cubic-bezier(.2,.7,.2,1) }
+  @keyframes commitZoom{
+    0%   { transform:scale(1) }
+    35%  { transform:scale(1.012) }
+    100% { transform:scale(1) }
+  }
+  /* Accessibility: drop all screen-level motion when the user opted out.
+   * Hit sparks + sprite shakes stay (they're local + brief); we only kill
+   * the global camera moves so people who get motion-sick can still play. */
+  @media (prefers-reduced-motion: reduce){
+    .duel.shake-screen, .duel.shake-heavy, .duel.shake-crit,
+    .duel.slow-mo, .duel.commit-zoom { animation:none !important; }
   }
   .mistpuff{position:absolute; width:120px; height:120px; border-radius:50%;
     background:radial-gradient(circle, rgba(207,232,240,.55), transparent 65%);
@@ -694,9 +887,110 @@
     </div>
     <div style="display:flex; align-items:center; gap:6px">
       <div class="backend" id="backend"></div>
+      <!-- Help: moves catalogue + rules + persona tease. Pure frontend
+           modal — see #helpModal below + setupHelpModal() in the JS. -->
+      <button class="lb-link" id="openHelp" title="Moves and rules">? Rules</button>
       <button class="lb-link" id="openLb" title="Show the climbers' board">▲ Leaderboard</button>
     </div>
   </header>
+
+  <!-- HELP MODAL: moves catalogue + game rules. Hidden by default; the
+       openHelp button toggles .hide off. Built from META.moves so the
+       catalogue stays in sync with engine.MOVES with zero duplication. -->
+  <div class="ov hide" id="helpModal">
+    <div class="card help-card">
+      <div class="help-head">
+        <span class="deva">॥ धुंध ॥</span>
+        <h2>The Rules of the Mist</h2>
+        <button class="help-close" id="closeHelp" aria-label="Close">×</button>
+      </div>
+      <div class="help-tabs">
+        <button class="help-tab active" data-tab="rules">RULES</button>
+        <button class="help-tab"        data-tab="moves">MOVES</button>
+        <button class="help-tab"        data-tab="personas">PATH</button>
+      </div>
+
+      <!-- Rules tab -->
+      <div class="help-panel active" data-panel="rules">
+        <div class="rule">
+          <div class="rule-em">⏵⏵</div>
+          <div>
+            <b>Blind commit.</b> Each round you both choose a move <i>in
+            secret</i>, then both moves resolve at once. You cannot react
+            to their choice — only <i>read</i> them from the history.
+          </div>
+        </div>
+        <div class="rule">
+          <div class="rule-em">⚡⛰🌊</div>
+          <div>
+            <b>The triangle.</b> <code>STRIKE</code> beats
+            <code>GRAPPLE</code>; <code>GRAPPLE</code> breaks
+            <code>GUARD</code>; <code>GUARD</code> stops
+            <code>STRIKE</code>. Rock-paper-scissors with weight.
+          </div>
+        </div>
+        <div class="rule">
+          <div class="rule-em">🍃</div>
+          <div>
+            <b>Prana economy.</b> <code>FOCUS</code> gives you breath
+            but leaves you exposed — anything that lands lands hard.
+            <code>GUARD</code> earns +1 prana while blocking.
+            <code>ART</code> and <code>MIST_STEP</code> are powerful
+            but cost prana to commit.
+          </div>
+        </div>
+        <div class="rule">
+          <div class="rule-em">🌫</div>
+          <div>
+            <b>The Mist-Step is a bet.</b> If they attack this turn,
+            you dodge and counter. If they don't, you whiff and waste
+            prana. Use it as a <i>read</i>, not a hope.
+          </div>
+        </div>
+        <div class="rule">
+          <div class="rule-em">✦</div>
+          <div>
+            <b>Hidden combos.</b> Some three-move sequences awaken
+            named techniques that grant the trigger move extra weight.
+            The duelists know them; the move list does not. Find them
+            by playing, or by digging in the source. The opponent will
+            announce one when it lands.
+          </div>
+        </div>
+        <div class="rule">
+          <div class="rule-em">📜</div>
+          <div>
+            <b>The mind-scroll is the game.</b> While the opponent
+            reasons, their <code>&lt;think&gt;</code> trace renders in
+            the footer. Reading it tells you what they think
+            <i>you'll</i> do. That is the centrepiece, not a debug pane.
+          </div>
+        </div>
+      </div>
+
+      <!-- Moves tab — populated by buildMovesHelpPanel() from META.moves -->
+      <div class="help-panel" data-panel="moves">
+        <div class="moves-grid" id="movesGrid"></div>
+        <div class="moves-foot">
+          <i>Cost is in prana. <code>FOCUS</code> and <code>GUARD</code>
+          both gain breath. <code>MIST_STEP</code> is a counter-read
+          (its damage in the table is the counter you land when you
+          read an attack).</i>
+        </div>
+      </div>
+
+      <!-- Personas tab — names + glyphs of the ten ladder rungs without
+           spoiling their strategies. Lets the player see what's ahead. -->
+      <div class="help-panel" data-panel="personas">
+        <div class="ladder-tease" id="ladderTease"></div>
+      </div>
+
+      <div class="help-foot">
+        <span>built for the <b>Build Small Hackathon</b>, Track Two</span>
+        <button class="btn ghost" id="closeHelp2">Close</button>
+      </div>
+    </div>
+  </div>
 
   <!-- HP CORNER CARDS — anchored just under the header, in the duel corners -->
   <div class="hp-corner player" id="plPanel">
@@ -833,6 +1127,12 @@
            player watch two LLMs duel through the same UI + animations. -->
       <div><button class="btn ghost" id="cardBtnSelfplay" style="display:none">Watch self-play</button></div>
       <div><button class="btn ghost" id="cardBtn2" style="display:none">Walk back down</button></div>
+      <!-- B3 Share: appears on every post-match overlay (advance / clear /
+           defeat / double_ko). Renders a 1080x1080 PNG of the result via
+           pure canvas — no server route, no extra deps — and prefers
+           navigator.share on mobile (Web Share API with File payload),
+           falls back to a download <a> link on desktop. -->
+      <div><button class="btn ghost" id="cardBtnShare" style="display:none">Share replay card</button></div>
     </div>
   </div>
 
@@ -1180,6 +1480,15 @@
     // Continuing up the ladder just resets the per-level counter.
     if (ladderIndex === 0 || !runActive) resetRun();
     resetLevel();
+    // B3: hide the share button when leaving the result card. It re-appears
+    // in endRound() on every terminal status.
+    showShareButton(false);
+    // A1: reset the prana-rise tracking so the first renderState of the
+    // new fight doesn't fire a flicker on the START_PRANA value.
+    lastPlPrana = -1; lastOppPrana = -1;
+    // A3: reset weather classes — every new fight starts in clear weather.
+    const stage = $("stage");
+    if (stage){ stage.classList.remove("weather-flurry", "weather-blizzard"); }
 
     const opp = META.ladder[ladderIndex];
     // Crossfade to this opponent's arena — but only if the user hasn't
@@ -1210,12 +1519,75 @@
       box.appendChild(b);
     });
   }
+  // A3: ambient wind-gust ticker. Self-driving setTimeout loop — interval
+  // scales by weather class on .duel. Pauses when the title-card overlay
+  // is up, no fight has started, or the user opted out of motion. The DOM
+  // element is created per gust and removed after the animation so we
+  // never accumulate orphans even on long matches.
+  const gustReducedMotion = (typeof window !== "undefined")
+    && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function spawnGust(){
+    const duel = $("stage");
+    if (!duel) return;
+    const top = 12 + Math.random() * 28;    // 12-40% from top — most gusts above the fighters
+    const g = document.createElement("div");
+    g.className = "gust";
+    g.style.top = top + "%";
+    duel.appendChild(g);
+    requestAnimationFrame(() => g.classList.add("go"));
+    setTimeout(() => g.remove(), 3600);
+  }
+  function gustTick(){
+    const duel = $("stage");
+    const overlay = $("overlay");
+    const fightActive = !!state && overlay && overlay.classList.contains("hide");
+    if (!gustReducedMotion && fightActive && duel){
+      // Skip occasionally even when active so the cadence feels natural.
+      if (Math.random() < 0.82) spawnGust();
+    }
+    // Interval shrinks as the weather intensifies.
+    const cls = duel && duel.classList;
+    const nextMs =
+      cls && cls.contains("weather-blizzard") ? (1600 + Math.random()*900)
+    : cls && cls.contains("weather-flurry")   ? (3200 + Math.random()*1800)
+    :                                            (6500 + Math.random()*3500);
+    setTimeout(gustTick, nextMs);
+  }
+  // Kick the loop once at script load. It self-perpetuates via setTimeout.
+  setTimeout(gustTick, 4000);
+
+  // A1: track last-seen prana per side so renderState can detect a RISE
+  // (the player or AI just FOCUSed / GUARDed into +N prana) and flicker the
+  // sprite gold for ~900 ms via the .prana-rise CSS class. Initialised to
+  // -1 so the very first renderState doesn't fire on the START_PRANA value.
+  let lastPlPrana = -1, lastOppPrana = -1;
+  function flickerPrana(spriteId){
+    const el = $(spriteId);
+    if (!el) return;
+    el.classList.remove("prana-rise"); void el.offsetWidth;
+    el.classList.add("prana-rise");
+    setTimeout(() => el.classList.remove("prana-rise"), 900);
+  }
   function renderState(){
     $("plHp").style.width  = pct(state.player_hp) + "%";
     $("oppHp").style.width = pct(state.ai_hp) + "%";
     $("plHpTxt").textContent  = Math.max(0,state.player_hp) + " HP";
     $("oppHpTxt").textContent = Math.max(0,state.ai_hp) + " HP";
     drops($("plPrana"), state.player_prana); drops($("oppPrana"), state.ai_prana);
+    // A1: prana-rise flicker. Compare against the last-seen value per side;
+    // skip the first call after a fight reset (lastXPrana stays at -1 across
+    // newFight if we don't reset, so we explicitly handle that in newFight).
+    if (lastPlPrana  >= 0 && state.player_prana > lastPlPrana)  flickerPrana("plSprite");
+    if (lastOppPrana >= 0 && state.ai_prana     > lastOppPrana) flickerPrana("oppSprite");
+    lastPlPrana = state.player_prana; lastOppPrana = state.ai_prana;
+    // A3: weather progression by round count. light → flurry (round 6+) →
+    // blizzard (round 14+). Toggle classes on the duel root; CSS handles
+    // the visual changes (snow density, gust ticker, tint).
+    const stage = $("stage");
+    if (stage && state && state.round){
+      stage.classList.toggle("weather-flurry",   state.round >= 6 && state.round < 14);
+      stage.classList.toggle("weather-blizzard", state.round >= 14);
+    }
   }
   const pct = hp => Math.max(0, Math.min(100, hp/META.max_hp*100));
   function drops(box, n){
@@ -1229,6 +1601,9 @@
     if (busy || !state) return;
     busy = true; renderMoves();
     levelTurns++; runTurns++;
+    // B3: record the player's committed move so the replay card can render
+    // it as "final blow — X" even after the overlay covers the arena state.
+    lastResultCard.finalMovePlayer = (MOVES[playerMove] && MOVES[playerMove].label) || playerMove;
     // flash the just-picked move so user sees their commit landed
     const justPicked = document.querySelector(`.mv[data-move="${playerMove}"]`);
     if (justPicked) {
@@ -1259,6 +1634,18 @@
     lastMatchId = state.match_id || lastMatchId;
     lastStatus = data.status;
     delete state.player_move; renderState();
+    // Cinematic round opener — a 2-line beat that surfaces what each
+    // side actually committed, before the engine's resolve-log narrative
+    // lines (those come from RoundResult.log and stay verbatim). The
+    // glyphs (⚡/❄/🌫/🔥/🌊/⛰) come from the move catalogue in META.moves.
+    const plLabel = (META.moves.find(m=>m.id===playerMove)||{}).label || playerMove;
+    const plGlyph = (META.moves.find(m=>m.id===playerMove)||{}).glyph || "";
+    const oppMv   = META.moves.find(m=>m.id===data.ai_move) || {};
+    const oppGlyph= oppMv.glyph || "";
+    const oppLabel= oppMv.label || data.ai_move;
+    const oppName = (META.ladder[ladderIndex]||{}).name || "Opponent";
+    addLog(`<span style="opacity:.95">${plGlyph} <b>You</b> channeled <i>${plLabel}</i></span>`);
+    addLog(`<span style="opacity:.95">${oppGlyph} <b>${escapeHtml(oppName)}</b> answered with <i>${oppLabel}</i></span>`);
     data.log.forEach(line => addLog(line));
     if (data.status !== "continue"){ busy=false; return endRound(data); }
     busy = false; renderMoves();
@@ -1306,9 +1693,14 @@
     await wait(380);
     $("think").className = "think"; $("think").textContent = data.reasoning;
     if (data.taunt && data.taunt !== "..."){ $("taunt").textContent = data.taunt; $("taunt").style.display=""; }
+    // B3: keep the latest taunt + opponent move in the replay-card dict.
+    // We overwrite each round; the final round's values are what survives
+    // when endRound fires.
+    lastResultCard.taunt = data.taunt || "";
+    lastResultCard.finalMoveOpponent = (MOVES[data.ai_move] && MOVES[data.ai_move].label) || data.ai_move;
     await wait(120);
-    if (data.player_dmg){ $("plSprite").classList.add("hit"); impactAt("left"); floatDmg($("plFloats"), data.player_dmg, $("plPanel")); setTimeout(()=>$("plSprite").classList.remove("hit"), 460); }
-    if (data.ai_dmg){ $("oppSprite").classList.add("hit"); impactAt("right"); floatDmg($("oppFloats"), data.ai_dmg, $("oppPanel")); setTimeout(()=>$("oppSprite").classList.remove("hit"), 460); }
+    if (data.player_dmg){ $("plSprite").classList.add("hit"); impactAt("left",  data.player_dmg); floatDmg($("plFloats"), data.player_dmg, $("plPanel")); setTimeout(()=>$("plSprite").classList.remove("hit"), 460); }
+    if (data.ai_dmg){     $("oppSprite").classList.add("hit"); impactAt("right", data.ai_dmg);    floatDmg($("oppFloats"), data.ai_dmg, $("oppPanel")); setTimeout(()=>$("oppSprite").classList.remove("hit"), 460); }
     await wait(600);
   }
 
@@ -1331,21 +1723,420 @@
       fx.appendChild(b); setTimeout(()=>b.remove(), 1150);
     }
   }
-  function impactAt(victimSide){
+  // Bucket raw damage into shake/impact tiers. STRIKE_DMG=12, GRAPPLE=9,
+  // GRAPPLE_VS_GUARD=20, ART=22, MIST_COUNTER=14 in engine.py; with the
+  // FOCUS_EXPOSURE 1.6 multiplier the practical range tops out around 35.
+  // Combo bonus damage stacks on top — keep an eye on >32 for the
+  // critical tier so combo finishers feel decisive.
+  function damageTier(dmg){
+    if (!dmg || dmg <= 0) return "none";
+    if (dmg <= 6)  return "small";   // GRAPPLE base, half-ART vs Guard
+    if (dmg <= 17) return "normal";  // STRIKE, MIST_COUNTER, exposed grapple
+    if (dmg <= 28) return "heavy";   // ART, GRAPPLE vs Guard, exposed STRIKE
+    return "crit";                   // 30+ — exposed ART (35), Vajra Storm tier
+  }
+  function impactAt(victimSide, dmg){
     const i = document.createElement("div"); i.className = "impact";
     i.style.left = victimSide === "left" ? "20%" : "80%"; i.style.bottom = "100px";
     $("fx").appendChild(i); setTimeout(()=>i.remove(), 530);
-    // screen-shake the whole duel arena so hits have weight
+    // Tier the screen-shake by damage class. The duel-wide class lets the
+    // critical tier also do a small camera punch (scale 1.022) and the
+    // accessibility @media kills all camera-level motion for opt-outs.
+    const tier = damageTier(dmg);
+    const cls  = tier === "crit"   ? "shake-crit"
+              : tier === "heavy"  ? "shake-heavy"
+              : "shake-screen";
+    const dur  = tier === "crit" ? 720 : tier === "heavy" ? 580 : 460;
     const stage = $("stage");
-    stage.classList.remove("shake-screen"); void stage.offsetWidth;
-    stage.classList.add("shake-screen");
-    setTimeout(() => stage.classList.remove("shake-screen"), 460);
+    stage.classList.remove("shake-screen","shake-heavy","shake-crit");
+    void stage.offsetWidth;  // force reflow so the same class can re-fire
+    stage.classList.add(cls);
+    setTimeout(() => stage.classList.remove(cls), dur);
   }
+  // KO slow-mo: brief contrast+scale punch on the stage when a fighter
+  // hits 0 HP this round. Fires from endRound where the terminal status
+  // is known. ~900 ms; the resolution card opens after this completes.
+  function flashKO(){
+    const stage = $("stage");
+    stage.classList.remove("slow-mo"); void stage.offsetWidth;
+    stage.classList.add("slow-mo");
+    setTimeout(() => stage.classList.remove("slow-mo"), 950);
+  }
+  // Commit zoom — small camera lean-in on the move reveal so the moment
+  // has weight even on rounds where nobody takes damage.
+  function commitZoom(){
+    const stage = $("stage");
+    stage.classList.remove("commit-zoom"); void stage.offsetWidth;
+    stage.classList.add("commit-zoom");
+    setTimeout(() => stage.classList.remove("commit-zoom"), 580);
+  }
+
+  // ---------------------------------------------------------------------
+  // B3: shareable replay card (pure canvas, no extra deps)
+  // ---------------------------------------------------------------------
+  // We keep the final round's facts in a module-level dict; commit() / reveal()
+  // / endRound() each contribute, and shareReplayCard() reads from it at
+  // render time. This is safer than scraping the DOM after the overlay
+  // animates in (taunt nodes can already have been replaced).
+  const lastResultCard = { /* filled in commit/reveal/endRound */ };
+
+  // Try to load an image from /assets/. Returns the loaded HTMLImageElement,
+  // or null on failure. CORS-clean because we serve assets from the same
+  // origin via app.mount("/assets", StaticFiles(...)) in app.py.
+  function loadImg(url){
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload  = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+  }
+
+  // Word-wrap helper for canvas — Canvas 2D has no native wrapping.
+  function wrapLines(ctx, text, maxWidth){
+    const words = String(text).split(/\s+/);
+    const lines = [];
+    let cur = "";
+    for (const w of words){
+      const probe = cur ? (cur + " " + w) : w;
+      if (ctx.measureText(probe).width <= maxWidth){
+        cur = probe;
+      } else {
+        if (cur) lines.push(cur);
+        cur = w;
+      }
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  // Look up the persona's accent + glyph from META.ladder (injected by
+  // app._meta()). Defaults match the room-temperature --accent in :root
+  // so the card still renders if META is somehow missing the entry.
+  function personaVisuals(id){
+    const opp = (META.ladder || []).find(o => o.id === id) || {};
+    return {
+      accent: opp.accent || "#cfe8f0",
+      glyph:  opp.glyph  || "✦",
+      title:  opp.title  || "",
+    };
+  }
+
+  // Draw a rounded rect — Canvas 2D has no native helper for this in older
+  // engines, so a thin wrapper covers the wider browser matrix.
+  function roundRect(ctx, x, y, w, h, r){
+    if (typeof ctx.roundRect === "function"){
+      ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return;
+    }
+    const rr = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.lineTo(x + w - rr, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+    ctx.lineTo(x + w, y + h - rr);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+    ctx.lineTo(x + rr, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+    ctx.lineTo(x, y + rr);
+    ctx.quadraticCurveTo(x, y, x + rr, y);
+    ctx.closePath();
+  }
+
+  async function renderReplayCardCanvas(){
+    // Wait for Eczar / Mukta / VT323 to finish loading before drawing —
+    // the <link rel=stylesheet> for fonts.googleapis.com is async, so on
+    // a fresh tab the first call could otherwise render in the fallback
+    // serif. document.fonts.ready resolves once all declared faces are
+    // available.
+    if (document.fonts && document.fonts.ready){
+      try { await document.fonts.ready; } catch (_) { /* not critical */ }
+    }
+    const r = lastResultCard;
+    const W = 1080, H = 1080;
+    const cvs = document.createElement("canvas");
+    cvs.width = W; cvs.height = H;
+    const ctx = cvs.getContext("2d");
+    const opp = personaVisuals(r.opponentId);
+
+    // ---- 1. ARENA BACKDROP (persona's .webp poster, blurred + darkened)
+    const arenaKey = (typeof ARENAS === "object" && ARENAS && ARENAS[r.opponentId]) || "village";
+    const bg = await loadImg(`/assets/${arenaKey}.webp`);
+    if (bg) {
+      // cover-fit + slight zoom for cinematic crop
+      ctx.save();
+      ctx.filter = "blur(1.5px) brightness(.62) saturate(1.05)";
+      const scale = Math.max(W / bg.width, H / bg.height) * 1.08;
+      const dw = bg.width * scale, dh = bg.height * scale;
+      ctx.drawImage(bg, (W - dw)/2, (H - dh)/2 - 40, dw, dh);
+      ctx.restore();
+    } else {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, "#1f2a38");      // --panel-2
+      g.addColorStop(.6, "#141b25");      // --ink-2
+      g.addColorStop(1, "#0d1117");      // --ink
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+    // Vignette
+    ctx.fillStyle = "rgba(13, 17, 23, 0.55)"; ctx.fillRect(0, 0, W, H);
+
+    // ---- 2. PRAYER-FLAG TOP STRIPE (signature of the snowy village)
+    const flags = ["#2f6fb0","#e8a13a","#c0473b","#3f9d6c","#e9e2d0"]; // --flag-1..5
+    const stripeH = 6;
+    for (let i = 0; i < 22; i++){
+      ctx.fillStyle = flags[i % flags.length];
+      ctx.fillRect((W/22)*i, 0, W/22, stripeH);
+    }
+
+    // ---- 3. APP-STYLE CARD FRAME (panel gradient + persona-accent left rail)
+    // Mirrors .card in CSS: linear-gradient(180deg, --panel, --panel-2),
+    // border-left 3px accent.
+    const mx = 64, my = 96, mw = W - 2*mx, mh = H - 2*my;  // outer card box
+    ctx.save();
+    roundRect(ctx, mx, my, mw, mh, 22);
+    const cardG = ctx.createLinearGradient(mx, my, mx, my + mh);
+    cardG.addColorStop(0,   "rgba(25, 34, 46, 0.92)");      // --panel @ 92%
+    cardG.addColorStop(1,   "rgba(31, 42, 56, 0.92)");      // --panel-2 @ 92%
+    ctx.fillStyle = cardG; ctx.fill();
+    // 1px hairline border
+    ctx.lineWidth = 1; ctx.strokeStyle = "rgba(51, 69, 90, 0.9)"; // --line
+    ctx.stroke();
+    ctx.restore();
+    // Left rail in the persona accent (the "border-left:3px solid" look)
+    ctx.fillStyle = opp.accent;
+    ctx.fillRect(mx, my + 14, 6, mh - 28);
+
+    // ---- 4. TITLE BLOCK
+    ctx.textAlign = "center";
+    // small kicker
+    ctx.font = "500 22px 'Mukta', system-ui, sans-serif";
+    ctx.fillStyle = "rgba(232, 227, 211, 0.55)";   // --bone @ dim
+    ctx.fillText("A DUEL OF FORESIGHT", W/2, my + 70);
+    // big serif title in Eczar (loaded above)
+    ctx.font = "700 60px 'Eczar', Georgia, serif";
+    ctx.fillStyle = "#e9e2d0";                     // --bone
+    ctx.fillText("The Mind of Tashi", W/2, my + 132);
+
+    // ---- 5. VERSUS PANEL — two columns
+    // Two persona "tiles" with glyph + name, separated by a "vs" emblem
+    const tileY = my + 200, tileH = 220;
+    const tileW = (mw - 100) / 2;
+    const lx = mx + 30, rx = mx + mw - 30 - tileW;
+
+    drawPersonaTile(ctx, lx, tileY, tileW, tileH, {
+      glyph: "🌫",          // the challenger is glyph-agnostic; mist icon stands in
+      name:  r.playerName || "Challenger",
+      title: "the challenger",
+      accent: "#cfe8f0",    // mist-blue for the player side
+      side: "L",
+    });
+    drawPersonaTile(ctx, rx, tileY, tileW, tileH, {
+      glyph: opp.glyph,
+      name:  r.opponentName,
+      title: opp.title || "of the snowy village",
+      accent: opp.accent,
+      side: "R",
+    });
+    // "vs" emblem between tiles
+    ctx.save();
+    ctx.font = "italic 600 56px 'Eczar', serif";
+    ctx.fillStyle = "rgba(232, 161, 58, 0.95)";    // --ember
+    ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 12;
+    ctx.fillText("vs", W/2, tileY + tileH/2 + 18);
+    ctx.restore();
+
+    // ---- 6. RESULT BANNER
+    const palette = {
+      win:        { color: "#f3c270", text: `${r.playerName} prevails`,           emblem: "✦" }, // --ember-2
+      loss:       { color: "#c0473b", text: `${r.opponentName} reads you true`,   emblem: "🩸" }, // --crimson
+      double_ko:  { color: "#b59cff", text: "Both fall in the mist",              emblem: "⚔" },
+      draw:       { color: "#cfe8f0", text: "The mist holds",                     emblem: "❄" }, // --accent
+    };
+    const p = palette[r.outcome] || palette.draw;
+    const banY = tileY + tileH + 60;
+    // emblem
+    ctx.font = "500 84px 'Eczar', serif";
+    ctx.fillStyle = p.color;
+    ctx.fillText(p.emblem, W/2, banY);
+    // outcome phrase
+    ctx.font = "700 50px 'Eczar', Georgia, serif";
+    ctx.fillStyle = p.color;
+    ctx.fillText(p.text, W/2, banY + 70);
+    // final move
+    if (r.finalMove){
+      ctx.font = "400 24px 'Mukta', sans-serif";
+      ctx.fillStyle = "rgba(232, 227, 211, 0.75)";  // --bone dim
+      ctx.fillText(`final blow  —  ${r.finalMove.toUpperCase()}`, W/2, banY + 112);
+    }
+
+    // ---- 7. TAUNT in a mind-scroll style cardstock band
+    if (r.taunt && r.taunt.trim() && r.taunt !== "...") {
+      const tY = banY + 156, tH = 168;
+      const tX = mx + 50, tW = mw - 100;
+      // parchment-tinted band
+      ctx.save();
+      roundRect(ctx, tX, tY, tW, tH, 14);
+      const pgrad = ctx.createLinearGradient(tX, tY, tX, tY + tH);
+      pgrad.addColorStop(0, "rgba(233, 226, 208, 0.06)");
+      pgrad.addColorStop(1, "rgba(233, 226, 208, 0.02)");
+      ctx.fillStyle = pgrad; ctx.fill();
+      ctx.lineWidth = 1; ctx.strokeStyle = "rgba(51, 69, 90, 0.7)";
+      ctx.stroke();
+      // accent left rail
+      ctx.fillStyle = opp.accent;
+      ctx.fillRect(tX, tY + 12, 4, tH - 24);
+      ctx.restore();
+
+      // small "they say" label in monospace
+      ctx.font = "400 18px 'VT323', monospace";
+      ctx.fillStyle = "rgba(232, 161, 58, 0.85)";   // ember
+      ctx.textAlign = "left";
+      ctx.fillText("// MIND-SCROLL — final taunt", tX + 20, tY + 28);
+
+      // taunt body (italic Eczar)
+      ctx.textAlign = "center";
+      ctx.font = "italic 600 34px 'Eczar', Georgia, serif";
+      ctx.fillStyle = "#e9e2d0";
+      const lines = wrapLines(ctx, `"${r.taunt.trim()}"`, tW - 80);
+      let y = tY + 72;
+      for (const line of lines.slice(0, 3)) {
+        ctx.fillText(line, W/2, y);
+        y += 44;
+      }
+      // attribution
+      ctx.font = "400 20px 'Mukta', sans-serif";
+      ctx.fillStyle = "rgba(154, 166, 176, 0.85)"; // --bone-dim
+      ctx.fillText(`— ${r.opponentName}`, W/2, tY + tH - 22);
+    }
+
+    // ---- 8. FOOTER — stats + branding in VT323 mono
+    ctx.textAlign = "center";
+    ctx.font = "400 22px 'VT323', monospace";
+    ctx.fillStyle = "rgba(154, 166, 176, 0.85)";
+    const stats = `round ${r.rounds || "?"}  ·  ${r.turnsTotal || runTurns || 0} total turns  ·  ${arenaKey}`;
+    ctx.fillText(stats, W/2, my + mh - 56);
+    ctx.font = "400 18px 'VT323', monospace";
+    ctx.fillStyle = "rgba(154, 166, 176, 0.55)";
+    ctx.fillText("THE MIND OF TASHI  ·  BUILD SMALL HACKATHON  ·  TRACK TWO", W/2, my + mh - 28);
+
+    return cvs;
+  }
+
+  // Helper: persona tile inside the versus panel. The two tiles bookend
+  // a central "vs" emblem (drawn separately by the caller). Each tile is
+  // a translucent rounded rect with a persona-accent left rail, persona
+  // glyph (large), name (Eczar), and a one-line subtitle in Mukta.
+  function drawPersonaTile(ctx, x, y, w, h, t){
+    ctx.save();
+    roundRect(ctx, x, y, w, h, 16);
+    ctx.fillStyle = "rgba(13, 17, 23, 0.55)";
+    ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = "rgba(51, 69, 90, 0.85)";
+    ctx.stroke();
+    ctx.restore();
+    // accent rail
+    ctx.fillStyle = t.accent;
+    ctx.fillRect(x, y + 14, 4, h - 28);
+
+    // glyph (large, on a soft glow)
+    ctx.textAlign = "center";
+    ctx.save();
+    ctx.shadowColor = t.accent; ctx.shadowBlur = 28;
+    ctx.font = "500 80px 'Eczar', 'Apple Color Emoji', sans-serif";
+    ctx.fillStyle = t.accent;
+    ctx.fillText(t.glyph, x + w/2, y + 86);
+    ctx.restore();
+
+    // name
+    ctx.font = "700 38px 'Eczar', Georgia, serif";
+    ctx.fillStyle = "#e9e2d0";
+    ctx.fillText(t.name, x + w/2, y + 142);
+
+    // subtitle
+    ctx.font = "italic 500 19px 'Mukta', sans-serif";
+    ctx.fillStyle = "rgba(154, 166, 176, 0.95)";
+    ctx.fillText(t.title, x + w/2, y + 172);
+  }
+
+  // Generic helper — renders the canvas and either prompts the share sheet
+  // or downloads silently. When opts.auto=true we always download (no
+  // share-sheet prompt) and silently swallow render errors so the
+  // celebration UX isn't interrupted on a match-end auto-fire.
+  async function shareReplayCard(opts){
+    opts = opts || {};
+    const btn = $("cardBtnShare");
+    const orig = btn ? btn.textContent : "";
+    if (btn && !opts.auto){ btn.disabled = true; btn.textContent = "rendering..."; }
+    let cvs;
+    try {
+      cvs = await renderReplayCardCanvas();
+    } catch (e) {
+      console.error("[replay-card] render failed", e);
+      if (btn && !opts.auto){
+        btn.textContent = "card failed";
+        setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+      }
+      return;
+    }
+    cvs.toBlob(async blob => {
+      if (!blob) {
+        if (btn && !opts.auto){
+          btn.textContent = "card failed";
+          setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+        }
+        return;
+      }
+      const filename = `mind-of-tashi__${(lastResultCard.outcome||"draw")}__${(lastResultCard.opponentId||"opp")}.png`;
+      // Auto-fire path: skip the share sheet (no prompt), always download.
+      // Manual click path: prefer Web Share API with File payload on
+      // mobile / installed PWAs; fall back to download otherwise.
+      const file = new File([blob], filename, { type: "image/png" });
+      const useShareSheet = !opts.auto
+        && navigator.share && navigator.canShare && navigator.canShare({ files: [file] });
+      if (useShareSheet) {
+        try {
+          await navigator.share({
+            title: "The Mind of Tashi",
+            text: `${lastResultCard.playerName} vs ${lastResultCard.opponentName} - share your duel.`,
+            files: [file],
+          });
+          if (btn){ btn.textContent = "shared"; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500); }
+          return;
+        } catch (e) { /* user cancelled — silent fallthrough to download */ }
+      }
+      // Download via <a download>.
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      // For auto-fires we don't append to body; some browsers prefer it
+      // attached, but either works in mainstream browsers and skipping
+      // append leaves the DOM untouched on the auto path.
+      if (opts.auto){
+        a.style.display = "none"; document.body.appendChild(a); a.click(); a.remove();
+      } else {
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      if (btn && !opts.auto){
+        btn.textContent = "saved";
+        setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
+      }
+    }, "image/png");
+  }
+  function showShareButton(show){
+    const b = $("cardBtnShare");
+    if (!b) return;
+    b.style.display = show ? "" : "none";
+    b.onclick = show ? shareReplayCard : null;
+  }
+
   function showBanner(playerLabel, aiLabel){
     const old = document.querySelector(".move-banner"); if (old) old.remove();
     const b = document.createElement("div"); b.className = "move-banner";
     b.innerHTML = `<span class="pl">${playerLabel}</span><span class="vs">vs</span><span>${aiLabel}</span>`;
     $("stage").appendChild(b); setTimeout(()=>b.remove(), 1000);
+    // Brief camera lean-in on the reveal so even no-damage rounds carry
+    // weight. Honours prefers-reduced-motion via the @media rule.
+    commitZoom();
   }
   function floatDmg(box, dmg, panel){
     const f = document.createElement("div"); f.className = "float"; f.textContent = "-" + dmg;
@@ -1363,6 +2154,43 @@
 
     // Between-fight cards never re-ask for identity.
     $("identBlock").style.display = "none";
+
+    // Slow-mo punch on any terminal status (advance, ladder_clear, defeat,
+    // double_ko). Wait briefly so the moment hangs before the result card.
+    if (data.status !== "continue"){
+      flashKO();
+    }
+
+    // B3: populate the replay-card dict with the per-match facts that the
+    // commit()/reveal() captures don't have (opponent identity, outcome,
+    // rounds played). Done once per terminal status. We don't render here —
+    // the canvas only fires when the user clicks Share.
+    const outcomeMap = {
+      "advance":      "win",
+      "ladder_clear": "win",
+      "defeat":       "loss",
+      "double_ko":    "double_ko",
+    };
+    lastResultCard.playerName    = currentName ? currentName() : (lastResultCard.playerName || "Challenger");
+    lastResultCard.opponentName  = opp.name;
+    lastResultCard.opponentId    = opp.id;
+    lastResultCard.outcome       = outcomeMap[data.status] || "draw";
+    // The "final blow" is the winner's last move — gives the card narrative
+    // weight even on losses ("you were felled by Vajra Strike").
+    lastResultCard.finalMove     =
+      lastResultCard.outcome === "win"  ? lastResultCard.finalMovePlayer
+      : lastResultCard.outcome === "loss" ? lastResultCard.finalMoveOpponent
+      : (lastResultCard.finalMovePlayer || lastResultCard.finalMoveOpponent || "");
+    lastResultCard.rounds        = state ? state.round : (lastResultCard.rounds || 0);
+    lastResultCard.turnsTotal    = typeof runTurns === "number" ? runTurns : 0;
+    showShareButton(true);
+    // B3 auto-download: fire the share card silently 1.4s after the result
+    // overlay appears (gives the slow-mo + card animation time to settle).
+    // Skip the self-play watcher mode — the watcher fires endRound on every
+    // match transition and we don't want to spam the user's Downloads folder.
+    if (!selfplayMode){
+      setTimeout(() => shareReplayCard({ auto: true }).catch(() => {}), 1400);
+    }
 
     if (data.status === "advance"){
       pushLevel(opp, true);
@@ -1507,6 +2335,74 @@
   }
 
   $("openLb").onclick = openLeaderboard;
+
+  // ---------------------------------------------------------------------
+  // HELP MODAL — moves catalogue + rules + ladder tease.
+  // ---------------------------------------------------------------------
+  // Built once from META.moves and META.ladder (injected at page render)
+  // so there's zero duplicated content between engine.MOVES and the UI.
+  // Activating a tab toggles the .active class; the same .ov.hide /
+  // .ov.hide=off pattern as the leaderboard handles open/close.
+  function buildMovesHelpPanel(){
+    const grid = $("movesGrid");
+    if (!grid) return;
+    grid.innerHTML = "";
+    (META.moves || []).forEach(m => {
+      const c = document.createElement("div");
+      c.className = "move-card kind-" + (m.kind || "attack");
+      c.innerHTML = `
+        <div class="head">
+          <span class="glyph">${m.glyph || ""}</span>
+          <span class="name">${m.label || m.id}</span>
+          <span class="cost">${m.cost ? m.cost + " prana" : "free"}</span>
+        </div>
+        <div class="blurb">${m.blurb || ""}</div>
+      `;
+      grid.appendChild(c);
+    });
+  }
+  function buildLadderTeasePanel(){
+    const wrap = $("ladderTease");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    (META.ladder || []).forEach(o => {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.style.borderLeft = `3px solid ${o.accent || "#cfe8f0"}`;
+      row.innerHTML = `
+        <span class="g" style="color:${o.accent || "#cfe8f0"}">${o.glyph || "✦"}</span>
+        <span>
+          <span class="nm">${o.name}</span>
+          <span class="ti">${o.title || ""}</span>
+        </span>
+      `;
+      wrap.appendChild(row);
+    });
+  }
+  function setupHelpModal(){
+    buildMovesHelpPanel();
+    buildLadderTeasePanel();
+    const modal = $("helpModal");
+    const open  = () => { modal.classList.remove("hide"); };
+    const close = () => { modal.classList.add("hide"); };
+    $("openHelp").onclick = open;
+    $("closeHelp").onclick = close;
+    $("closeHelp2").onclick = close;
+    // ESC and click-outside both close.
+    modal.addEventListener("click", e => { if (e.target === modal) close(); });
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape" && !modal.classList.contains("hide")) close();
+    });
+    // Tab switching — purely class toggling on the [data-tab]/[data-panel] siblings.
+    modal.querySelectorAll(".help-tab").forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.dataset.tab;
+        modal.querySelectorAll(".help-tab").forEach(b => b.classList.toggle("active", b.dataset.tab === id));
+        modal.querySelectorAll(".help-panel").forEach(p => p.classList.toggle("active", p.dataset.panel === id));
+      };
+    });
+  }
+  setupHelpModal();
   $("lbClose").onclick = () => $("lbOv").classList.add("hide");
   $("lbOv").addEventListener("click", e => { if (e.target === $("lbOv")) $("lbOv").classList.add("hide"); });
   loadIdentity();

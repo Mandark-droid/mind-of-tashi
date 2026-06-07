@@ -38,6 +38,18 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from gradio import Server
+# Gradio 6.15's `cache` decorator: content-hashed function memoisation that
+# also bypasses the queue on cache hits. Optional import — if the deployed
+# Gradio version doesn't have it (pre-6.15), we fall back to functools.lru_cache
+# so the runtime still benefits from memoisation, just without the queue-bypass.
+try:
+    from gradio import cache as gr_cache  # type: ignore
+    _GRADIO_CACHE_AVAILABLE = True
+except ImportError:  # pragma: no cover  — pre-6.15 fallback
+    from functools import lru_cache as _lru
+    _GRADIO_CACHE_AVAILABLE = False
+    def gr_cache(max_size: int = 128, **_kwargs):  # noqa: D401
+        return _lru(maxsize=max_size)
 
 import engine
 import leaderboard
@@ -49,6 +61,12 @@ from llm import Reasoner
 HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = os.path.join(HERE, "static", "index.html")
 ASSETS = os.path.join(HERE, "static", "assets")
+
+# Read the index template ONCE at module load. Pre-6.15 we did this on every
+# `/` request — a 50+ KB file read per page view. The file is regenerated only
+# at deploy time, so caching it indefinitely is safe.
+with open(INDEX, "r", encoding="utf-8") as _fh:
+    _INDEX_TEMPLATE = _fh.read()
 
 # HF Spaces sets SPACE_ID automatically. We use it as the single switch for
 # "are we on a real Space?" — only then do we trust the OAuth session. Locally,
@@ -65,6 +83,12 @@ print(f"[app] opponent backend: {reasoner.backend}")
 
 
 # --- metadata injected into the page so the UI renders from one source ----
+# @gr_cache singleton: _meta() takes no arguments, returns the same payload on
+# every call within an app boot (the move catalogue is module-constant, the
+# ladder is module-constant, and selfplay.SELFPLAY_MODE is evaluated once at
+# import). Caching with max_size=1 lets us serve `/` without rebuilding the
+# dict per request; gradio 6.15 also short-circuits the queue on cache hits.
+@gr_cache(max_size=1)
 def _meta() -> dict:
     return {
         "backend": reasoner.backend,
@@ -195,9 +219,9 @@ def _outcome_phrase(result: engine.RoundResult, pm: str, am: str) -> str:
 
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
-    with open(INDEX, "r", encoding="utf-8") as fh:
-        html = fh.read()
-    return html.replace("__GAME_META__", json.dumps(_meta()))
+    # _INDEX_TEMPLATE is read once at module load; _meta() is memoised.
+    # The whole route handler becomes a O(template_size) string substitution.
+    return _INDEX_TEMPLATE.replace("__GAME_META__", json.dumps(_meta()))
 
 
 # --- leaderboard wiring ---------------------------------------------------

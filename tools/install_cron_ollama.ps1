@@ -41,7 +41,7 @@ $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
     -RunOnlyIfNetworkAvailable `
-    -ExecutionTimeLimit (New-TimeSpan -Hours 3) `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 2) `
     -StartWhenAvailable
 
 Register-ScheduledTask `
