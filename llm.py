@@ -17,10 +17,11 @@ The web layer does not know or care which backend is live.
 
 from __future__ import annotations
 import json
+import math
 import os
 import random
 from collections import Counter
-from typing import Dict, List, Tuple
+from typing import Dict, Iterator, List, Tuple
 
 import prompts
 from engine import MOVES, ATTACKS
@@ -71,19 +72,47 @@ class Reasoner:
         legal = [m for m in MOVES if state["ai_prana"] >= MOVES[m]["cost"]]
         if self.llm is None:
             parsed = _mock_choose(opp, state, legal)
+            parsed["conviction"] = _mock_conviction(opp, parsed)
             return parsed, _synthesize_raw(parsed)
         messages = [
             {"role": "system", "content": prompts.build_system(opp)},
             {"role": "user", "content": prompts.build_user(opp, state, legal)},
         ]
-        out = self.llm.create_chat_completion(
+        out = self._complete(messages, opp)
+        raw = out["choices"][0]["message"]["content"]
+        parsed = prompts.parse_reply(raw, legal)
+        # CONVICTION METER (IDEAS.md §E1): read the model's per-token confidence
+        # straight off the llama.cpp logprobs — the signal a cloud API can't
+        # expose — and surface it to the UI as a readable "tell".
+        conv = _conviction_from_completion(out, parsed.get("move"))
+        if conv is None:  # logprobs unavailable on this build — estimate instead
+            conv = _mock_conviction(opp, parsed)
+            conv["source"] = "estimated"
+        parsed["conviction"] = conv
+        return parsed, raw
+
+    def _complete(self, messages: List[Dict], opp: Opponent):
+        """create_chat_completion, asking for logprobs; degrade if unsupported.
+
+        Older llama-cpp-python builds reject the OpenAI-style ``logprobs`` /
+        ``top_logprobs`` kwargs — in that case we retry without them and the
+        Conviction Meter falls back to an estimate (see choose_with_raw).
+        """
+        base = dict(
             messages=messages,
             max_tokens=opp.think_tokens + 80,
             temperature=0.7 + 0.05 * (5 - opp.difficulty),  # brawlers run hotter
             top_p=0.9,
         )
-        raw = out["choices"][0]["message"]["content"]
-        return prompts.parse_reply(raw, legal), raw
+        # Ask for logprobs in whichever dialect this llama-cpp build speaks:
+        # OpenAI-style (bool + top_logprobs) first, then the integer form, then
+        # bare. Any failure just degrades the Conviction Meter to an estimate.
+        for kwargs in ({"logprobs": True, "top_logprobs": 1}, {"logprobs": 1}, {}):
+            try:
+                return self.llm.create_chat_completion(**base, **kwargs)
+            except (TypeError, ValueError) as exc:
+                print(f"[llm] logprobs variant {kwargs or '{}'} rejected ({exc}); trying next")
+        return self.llm.create_chat_completion(**base)
 
 
 def _synthesize_raw(parsed: Dict) -> str:
@@ -94,6 +123,143 @@ def _synthesize_raw(parsed: Dict) -> str:
     """
     obj = {"move": parsed["move"], "taunt": parsed["taunt"]}
     return f"<think>{parsed['reasoning']}</think>\n{json.dumps(obj, ensure_ascii=False)}"
+
+
+# ------------------------------------------------------------------------- #
+# Conviction Meter (IDEAS.md §E1 / ROADMAP §2.5) — turn the model's raw
+# token-level confidence into a readable game signal. Everything here is a
+# pure read on the existing llama.cpp completion: no extra inference, no
+# network, blind-commit untouched. The shape returned to the UI:
+#   {score, decision_score, think_score, source, peak:{i,t}|None,
+#    tokens:[{t, c}]}   where c = per-token conviction 0..100
+# ------------------------------------------------------------------------- #
+def _iter_token_logprobs(out: Dict) -> Iterator[Tuple[str, float]]:
+    """Yield (token_text, logprob) from whichever logprobs shape we got.
+
+    Handles both the OpenAI-style chat shape
+    (``choices[0].logprobs.content = [{token, logprob}, ...]``) and the older
+    llama.cpp completion shape (``{tokens:[...], token_logprobs:[...]}``).
+    """
+    try:
+        choice = out["choices"][0]
+    except (KeyError, IndexError, TypeError):
+        return
+    lp = choice.get("logprobs") if isinstance(choice, dict) else None
+    if not isinstance(lp, dict):
+        return
+    content = lp.get("content")
+    if content:
+        for item in content:
+            val = item.get("logprob")
+            if val is not None:
+                yield str(item.get("token", "")), float(val)
+        return
+    toks, tlps = lp.get("tokens"), lp.get("token_logprobs")
+    if toks and tlps and len(toks) == len(tlps):
+        for tok, val in zip(toks, tlps):
+            if val is not None:
+                yield str(tok), float(val)
+
+
+def _conviction_from_completion(out: Dict, move_id: str | None) -> Dict | None:
+    """Compute the conviction signal from a completion's logprobs, or None.
+
+    ``score`` (the headline gauge) is the model's confidence in the tokens of
+    the move it actually committed — i.e. *how exploitable was this commit*.
+    ``tokens`` carries the per-token confidence of the <think> block so the UI
+    can tint the mind-scroll, and ``peak`` marks the single most-hesitant word.
+    """
+    pairs = list(_iter_token_logprobs(out))
+    if not pairs:
+        return None
+
+    spans = []  # [start, end, token_text, conviction_pct]
+    text = ""
+    for tok, lp in pairs:
+        start = len(text)
+        text += tok
+        prob = math.exp(lp)
+        prob = 0.0 if prob < 0 else (1.0 if prob > 1 else prob)
+        spans.append([start, len(text), tok, int(round(prob * 100))])
+
+    ti, tc = text.find("<think>"), text.find("</think>")
+    think_lo = (ti + len("<think>")) if ti != -1 else 0
+    think_hi = tc if tc != -1 else len(text)
+    post_lo = (tc + len("</think>")) if tc != -1 else 0
+
+    think_tokens = [
+        {"t": tok, "c": c}
+        for s, e, tok, c in spans
+        if e > think_lo and s < think_hi
+    ]
+
+    # decision tokens = the tokens spelling the committed move id, after </think>
+    decision_convs: List[int] = []
+    if move_id:
+        mpos = text.find(move_id, post_lo)
+        if mpos == -1:
+            mpos = text.upper().find(move_id.upper(), post_lo)
+        if mpos != -1:
+            mend = mpos + len(move_id)
+            decision_convs = [c for s, e, tok, c in spans if e > mpos and s < mend]
+    if not decision_convs:  # couldn't pin the move id — use the whole JSON line
+        decision_convs = [c for s, e, tok, c in spans if s >= post_lo] or [c for *_, c in spans]
+
+    think_convs = [tt["c"] for tt in think_tokens] or [c for *_, c in spans]
+
+    # peak hesitation = lowest-confidence *wordy* think token (skip whitespace/punct)
+    peak = None
+    wordy = [(i, tt) for i, tt in enumerate(think_tokens) if any(ch.isalpha() for ch in tt["t"])]
+    if wordy:
+        i, tt = min(wordy, key=lambda it: it[1]["c"])
+        peak = {"i": i, "t": tt["t"].strip()}
+
+    return {
+        "score": int(round(sum(decision_convs) / len(decision_convs))),
+        "decision_score": int(round(sum(decision_convs) / len(decision_convs))),
+        "think_score": int(round(sum(think_convs) / len(think_convs))),
+        "source": "llama.cpp",
+        "tokens": think_tokens,
+        "peak": peak,
+    }
+
+
+# Per-persona baseline conviction for the mock / estimate path, so the meter
+# is demoable without a GGUF. tenzin (storm-voice, deliberately unpredictable)
+# reads as low-conviction; the summit bosses read as ice-cold sure.
+_MOCK_CONVICTION_BASE = {
+    "tashi": 82, "lhamo": 70, "norbu": 74, "yeshi": 68, "pema": 78,
+    "karma": 72, "drogpa": 70, "tenzin": 48, "the-mountain": 88,
+    "the-veiled-one": 90,
+}
+_HEDGE_WORDS = {"not", "or", "yet", "wait", "no", "maybe", "perhaps", "but", "...", "—"}
+
+
+def _mock_conviction(opp: Opponent, parsed: Dict) -> Dict:
+    """Synthesize a believable conviction signal when real logprobs are absent.
+
+    Marked ``source != "llama.cpp"`` so the UI can flag it as an estimate — we
+    do not pass synthetic confidence off as the real thing.
+    """
+    base = _MOCK_CONVICTION_BASE.get(opp.id, 66)
+    words = (parsed.get("reasoning") or "").split()
+    tokens = [
+        {"t": (" " if i else "") + w, "c": max(20, min(98, base + random.randint(-8, 8)))}
+        for i, w in enumerate(words)
+    ]
+    peak = None
+    if tokens:
+        hedge_idx = next(
+            (i for i, w in enumerate(words) if w.strip(".,;:!?").lower() in _HEDGE_WORDS),
+            None,
+        )
+        di = hedge_idx if hedge_idx is not None else len(tokens) // 2
+        tokens[di]["c"] = max(12, base - 45)  # carve one clear dip for the flash
+        peak = {"i": di, "t": words[di].strip()}
+    return {
+        "score": base, "decision_score": base, "think_score": base,
+        "source": "mock", "tokens": tokens, "peak": peak,
+    }
 
 
 # ------------------------------------------------------------------------- #

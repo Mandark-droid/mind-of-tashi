@@ -485,6 +485,22 @@
   .footer-scroll .reading::after{content:"\2026"; animation:blink 1.2s steps(4) infinite}
   @keyframes blink{0%{opacity:.2}50%{opacity:1}100%{opacity:.2}}
 
+  /* ---- CONVICTION METER (IDEAS.md §E1) ----------------------------- */
+  /* The opponent's per-token confidence, read straight off llama.cpp logprobs.
+     The scroll fades where she is unsure; the single most-hesitant word burns
+     red. The whole "tell" only exists because we own a small local model. */
+  .footer-scroll .hdr .cv{display:flex; align-items:center; gap:7px; margin-left:auto; transition:opacity .3s}
+  .footer-scroll .hdr .cv .cv-lab{font-size:10px; letter-spacing:.16em}
+  .footer-scroll .hdr .cv .cv-bar{position:relative; width:120px; height:6px; border-radius:4px; background:rgba(255,255,255,.08); overflow:hidden}
+  .footer-scroll .hdr .cv .cv-fill{position:absolute; left:0; top:0; bottom:0; width:0%; border-radius:4px; transition:width .6s cubic-bezier(.2,.7,.2,1), background .6s}
+  .footer-scroll .hdr .cv .cv-num{font-size:10.5px; font-variant-numeric:tabular-nums; min-width:2.4em; text-align:right; color:var(--bone)}
+  .footer-scroll .hdr .cv.est .cv-lab::after{content:" ~est"; opacity:.55}
+  .footer-scroll .think .tk{transition:opacity .3s, color .3s}
+  .footer-scroll .think .tk.wavered{color:#ff6b6b !important; opacity:1 !important; text-shadow:0 0 10px rgba(255,107,107,.55)}
+  .cv-flash{position:fixed; pointer-events:none; z-index:30; font-size:12px; letter-spacing:.06em; color:#ff8c8c; background:rgba(20,8,10,.85); border:1px solid rgba(255,107,107,.4); padding:3px 9px; border-radius:6px; opacity:0; animation:cvflash 1.8s ease-out forwards; white-space:nowrap}
+  @keyframes cvflash{0%{opacity:0; transform:translateY(6px)} 12%{opacity:1; transform:translateY(0)} 70%{opacity:1} 100%{opacity:0; transform:translateY(-8px)}}
+  @media (prefers-reduced-motion: reduce){ .footer-scroll .hdr .cv .cv-fill{transition:none} .cv-flash{animation-duration:1.1s} }
+
   /* ---- MOBILE FALLBACK --------------------------------------------- */
   @media (max-width:900px){
     :root{ --header-h:54px; --left-w:0px; --right-w:0px; --footer-h:auto }
@@ -1045,7 +1061,13 @@
   <!-- FOOTER: mind-scroll — the AI's reasoning, full width across the bottom -->
   <footer class="footer-scroll" id="scroll">
     <div class="inner">
-      <div class="hdr"><span class="dot"></span><span id="scrollLabel">the mind of your opponent</span></div>
+      <div class="hdr"><span class="dot"></span><span id="scrollLabel">the mind of your opponent</span>
+        <span class="cv" id="cvMeter" style="visibility:hidden" title="The opponent's confidence in the move she just committed, read from the model's token logprobs. Low = exploitable.">
+          <span class="cv-lab">conviction</span>
+          <span class="cv-bar"><span class="cv-fill" id="cvFill"></span></span>
+          <span class="cv-num" id="cvNum">—</span>
+        </span>
+      </div>
       <div class="think reading" id="think">awaiting the opening round.</div>
     </div>
     <!-- taunt sits OUTSIDE .inner so it's never clipped by the mind-scroll's max-height -->
@@ -1612,6 +1634,7 @@
     }
     $("taunt").style.display = "none";
     $("think").className = "think reading";
+    { const m = $("cvMeter"); if (m) m.style.visibility = "hidden"; }  // reset meter while she thinks
     startReadingRotation();
     state.player_move = playerMove;
     let data;
@@ -1684,6 +1707,65 @@
     commit(pData.move);  // not awaited — commit() chains itself via the auto-advance above
   }
 
+  /* ============================================================
+     CONVICTION METER (IDEAS.md §E1) — render the opponent's per-token
+     confidence. `data.conviction` comes off the llama.cpp logprobs
+     (source "llama.cpp"), or is an estimate on the mock backend. The
+     scroll fades where she is unsure; her single most-hesitant word
+     burns red with a "← she wavered" flash. Falls back to plain text
+     when no conviction is present (e.g. self-play opponent).
+     ============================================================ */
+  function convColor(score){
+    const s = Math.max(0, Math.min(100, score));
+    return `hsl(${Math.round(1.3*s)}, 68%, 52%)`;  // 0=red → 100=green
+  }
+  function renderConviction(data){
+    const think = $("think"), meter = $("cvMeter"), fill = $("cvFill"), num = $("cvNum");
+    const cv = data && data.conviction;
+    if (!cv){                                   // no signal — plain scroll
+      if (meter) meter.style.visibility = "hidden";
+      think.textContent = data.reasoning;
+      return;
+    }
+    const score = Math.max(0, Math.min(100, Math.round(cv.score)));
+    if (meter){
+      meter.style.visibility = "visible";
+      meter.classList.toggle("est", cv.source !== "llama.cpp");
+      fill.style.width = score + "%";
+      fill.style.background = convColor(score);
+      num.textContent = score;
+    }
+    // tinted scroll: fade each token by its confidence, burn the peak red
+    if (Array.isArray(cv.tokens) && cv.tokens.length){
+      think.textContent = "";
+      cv.tokens.forEach((tk, i) => {
+        const span = document.createElement("span");
+        span.className = "tk";
+        span.textContent = tk.t;
+        span.style.opacity = (0.35 + 0.0065 * Math.max(0, Math.min(100, tk.c))).toFixed(2);
+        if (cv.peak && i === cv.peak.i) span.classList.add("wavered");
+        think.appendChild(span);
+      });
+    } else {
+      think.textContent = data.reasoning;
+    }
+    // "← she wavered" flash over the most-hesitant word
+    if (cv.peak){
+      requestAnimationFrame(() => {
+        const w = think.querySelector(".tk.wavered");
+        if (!w) return;
+        const r = w.getBoundingClientRect();
+        const note = document.createElement("div");
+        note.className = "cv-flash";
+        note.textContent = "← she wavered";
+        note.style.left = Math.max(8, Math.min(window.innerWidth - 130, r.left)) + "px";
+        note.style.top = Math.max(8, r.top - 26) + "px";
+        document.body.appendChild(note);
+        setTimeout(() => note.remove(), 1900);
+      });
+    }
+  }
+
   async function reveal(playerMove, data){
     const pl = playerMove.toLowerCase(); const op = String(data.ai_move).toLowerCase();
     showBanner(MOVES[playerMove].label, MOVES[data.ai_move].label);
@@ -1691,7 +1773,7 @@
     setPose($("oppSprite"), op, oppPalette);
     fireFX(pl, "left"); fireFX(op, "right");
     await wait(380);
-    $("think").className = "think"; $("think").textContent = data.reasoning;
+    $("think").className = "think"; renderConviction(data);
     if (data.taunt && data.taunt !== "..."){ $("taunt").textContent = data.taunt; $("taunt").style.display=""; }
     // B3: keep the latest taunt + opponent move in the replay-card dict.
     // We overwrite each round; the final round's values are what survives
