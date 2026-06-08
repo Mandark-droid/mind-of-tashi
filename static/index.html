@@ -489,7 +489,7 @@
   /* The opponent's per-token confidence, read straight off llama.cpp logprobs.
      The scroll fades where she is unsure; the single most-hesitant word burns
      red. The whole "tell" only exists because we own a small local model. */
-  .footer-scroll .hdr .cv{display:flex; align-items:center; gap:7px; margin-left:auto; transition:opacity .3s}
+  .footer-scroll .hdr .cv{display:flex; align-items:center; gap:7px; transition:opacity .3s}
   .footer-scroll .hdr .cv .cv-lab{font-size:10px; letter-spacing:.16em}
   .footer-scroll .hdr .cv .cv-bar{position:relative; width:120px; height:6px; border-radius:4px; background:rgba(255,255,255,.08); overflow:hidden}
   .footer-scroll .hdr .cv .cv-fill{position:absolute; left:0; top:0; bottom:0; width:0%; border-radius:4px; transition:width .6s cubic-bezier(.2,.7,.2,1), background .6s}
@@ -500,6 +500,20 @@
   .cv-flash{position:fixed; pointer-events:none; z-index:30; font-size:12px; letter-spacing:.06em; color:#ff8c8c; background:rgba(20,8,10,.85); border:1px solid rgba(255,107,107,.4); padding:3px 9px; border-radius:6px; opacity:0; animation:cvflash 1.8s ease-out forwards; white-space:nowrap}
   @keyframes cvflash{0%{opacity:0; transform:translateY(6px)} 12%{opacity:1; transform:translateY(0)} 70%{opacity:1} 100%{opacity:0; transform:translateY(-8px)}}
   @media (prefers-reduced-motion: reduce){ .footer-scroll .hdr .cv .cv-fill{transition:none} .cv-flash{animation-duration:1.1s} }
+
+  /* ---- COMPOSURE (IDEAS.md §E2) ------------------------------------ */
+  /* How rattled she is. Lands reads/counters → composure falls → her sampling
+     temperature rises → her reasoning frays (and the conviction meter drops). */
+  .footer-scroll .hdr .cm{display:flex; align-items:center; gap:7px; margin-left:auto; transition:opacity .3s}
+  .footer-scroll .hdr .cm .cm-lab{font-size:10px; letter-spacing:.16em}
+  .footer-scroll .hdr .cm .cm-bar{position:relative; width:90px; height:6px; border-radius:4px; background:rgba(255,255,255,.08); overflow:hidden}
+  .footer-scroll .hdr .cm .cm-fill{position:absolute; left:0; top:0; bottom:0; width:100%; border-radius:4px; background:linear-gradient(90deg,#7fd6ff,#9ad0b0); transition:width .6s cubic-bezier(.2,.7,.2,1), background .6s}
+  .footer-scroll .hdr .cm .cm-num{font-size:10.5px; font-variant-numeric:tabular-nums; min-width:2.4em; text-align:right; color:var(--bone)}
+  .footer-scroll.rattled .inner{border-left-color:#ff6b6b}
+  .footer-scroll.rattled .hdr #scrollLabel{color:#ff9a9a}
+  .footer-scroll.rattled .hdr .dot{background:#ff6b6b; box-shadow:0 0 9px #ff6b6b; animation:cmjitter .5s steps(2) infinite}
+  @keyframes cmjitter{0%{transform:translate(0,0)}50%{transform:translate(.6px,-.6px)}100%{transform:translate(-.6px,.6px)}}
+  @media (prefers-reduced-motion: reduce){ .footer-scroll.rattled .hdr .dot{animation:none} .footer-scroll .hdr .cm .cm-fill{transition:none} }
 
   /* ---- MOBILE FALLBACK --------------------------------------------- */
   @media (max-width:900px){
@@ -1062,6 +1076,11 @@
   <footer class="footer-scroll" id="scroll">
     <div class="inner">
       <div class="hdr"><span class="dot"></span><span id="scrollLabel">the mind of your opponent</span>
+        <span class="cm" id="cmMeter" style="visibility:hidden" title="Her composure (IDEAS §E2). Landing reads/counters frays her — her sampling temperature rises and her reasoning degrades.">
+          <span class="cm-lab">composure</span>
+          <span class="cm-bar"><span class="cm-fill" id="cmFill"></span></span>
+          <span class="cm-num" id="cmNum">—</span>
+        </span>
         <span class="cv" id="cvMeter" style="visibility:hidden" title="The opponent's confidence in the move she just committed, read from the model's token logprobs. Low = exploitable.">
           <span class="cv-lab">conviction</span>
           <span class="cv-bar"><span class="cv-fill" id="cvFill"></span></span>
@@ -1635,6 +1654,7 @@
     $("taunt").style.display = "none";
     $("think").className = "think reading";
     { const m = $("cvMeter"); if (m) m.style.visibility = "hidden"; }  // reset meter while she thinks
+    { const m = $("cmMeter"); if (m) m.style.visibility = "hidden"; }  // (composure too)
     startReadingRotation();
     state.player_move = playerMove;
     let data;
@@ -1766,6 +1786,29 @@
     }
   }
 
+  /* COMPOSURE (IDEAS.md §E2) — how rattled she is. As it falls, her sampling
+     temperature rises (server-side) so her reasoning genuinely frays and the
+     conviction meter drops with it. Below 40 the scroll goes "rattled". */
+  function renderComposure(data){
+    const meter = $("cmMeter"), fill = $("cmFill"), num = $("cmNum"), footer = $("scroll");
+    const c = data && (typeof data.composure === "number" ? data.composure : null);
+    if (c === null || c === undefined){
+      if (meter) meter.style.visibility = "hidden";
+      if (footer) footer.classList.remove("rattled");
+      return;
+    }
+    const v = Math.max(0, Math.min(100, Math.round(c)));
+    if (meter){
+      meter.style.visibility = "visible";
+      fill.style.width = v + "%";
+      fill.style.background = v < 40
+        ? "linear-gradient(90deg,#ff6b6b,#ffb36b)"     // fraying
+        : "linear-gradient(90deg,#7fd6ff,#9ad0b0)";    // composed
+      num.textContent = v;
+    }
+    if (footer) footer.classList.toggle("rattled", v < 40);
+  }
+
   async function reveal(playerMove, data){
     const pl = playerMove.toLowerCase(); const op = String(data.ai_move).toLowerCase();
     showBanner(MOVES[playerMove].label, MOVES[data.ai_move].label);
@@ -1773,7 +1816,7 @@
     setPose($("oppSprite"), op, oppPalette);
     fireFX(pl, "left"); fireFX(op, "right");
     await wait(380);
-    $("think").className = "think"; renderConviction(data);
+    $("think").className = "think"; renderConviction(data); renderComposure(data);
     if (data.taunt && data.taunt !== "..."){ $("taunt").textContent = data.taunt; $("taunt").style.display=""; }
     // B3: keep the latest taunt + opponent move in the replay-card dict.
     // We overwrite each round; the final round's values are what survives

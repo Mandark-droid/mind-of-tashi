@@ -24,7 +24,7 @@ from collections import Counter
 from typing import Dict, Iterator, List, Tuple
 
 import prompts
-from engine import MOVES, ATTACKS
+from engine import MOVES, ATTACKS, MAX_HP
 from opponents import Opponent
 
 # ----- configuration (override via Space "Variables") ---------------------
@@ -41,6 +41,12 @@ FORCE_MOCK = os.environ.get("FORCE_MOCK", "0") == "1"
 LOGITS_ALL = os.environ.get("LOGITS_ALL", "1") == "1"
 # How many top alternatives to pull per token for the entropy-based conviction.
 CONVICTION_TOPK = int(os.environ.get("CONVICTION_TOPK", "5"))
+# CRACK HER COMPOSURE (IDEAS.md §E2): as the player lands reads/counters, the
+# opponent's sampling temperature rises — her reasoning genuinely frays (and the
+# Conviction Meter drops with it, since hotter sampling = more entropy). Gain =
+# extra temperature at full tilt; MAX caps it so she degrades, not pure gibberish.
+COMPOSURE_TEMP_GAIN = float(os.environ.get("COMPOSURE_TEMP_GAIN", "0.8"))
+COMPOSURE_TEMP_MAX = float(os.environ.get("COMPOSURE_TEMP_MAX", "1.6"))
 
 
 class Reasoner:
@@ -87,38 +93,54 @@ class Reasoner:
         equivalent raw string so downstream code can be agnostic.
         """
         legal = [m for m in MOVES if state["ai_prana"] >= MOVES[m]["cost"]]
+        # CRACK HER COMPOSURE (§E2): how rattled she is, from past outcomes only
+        # (blind-commit safe). Drives temperature on the real path and a wild-
+        # swing chance on the mock path; surfaced to the UI as `composure`.
+        tilt = _composure_tilt(state)
+        composure = int(round(100 * (1 - tilt)))
         if self.llm is None:
             parsed = _mock_choose(opp, state, legal)
-            parsed["conviction"] = _mock_conviction(opp, parsed)
+            if legal and tilt > 0 and random.random() < tilt * 0.5:
+                parsed["move"] = random.choice(legal)  # composure cracks: a wild swing
+            parsed["conviction"] = _degrade_conviction(_mock_conviction(opp, parsed), tilt)
+            parsed["composure"] = composure
             return parsed, _synthesize_raw(parsed)
         messages = [
             {"role": "system", "content": prompts.build_system(opp)},
             {"role": "user", "content": prompts.build_user(opp, state, legal)},
         ]
-        out = self._complete(messages, opp)
+        out = self._complete(messages, opp, tilt)
         raw = out["choices"][0]["message"]["content"]
         parsed = prompts.parse_reply(raw, legal)
         # CONVICTION METER (IDEAS.md §E1): read the model's per-token confidence
         # straight off the llama.cpp logprobs — the signal a cloud API can't
-        # expose — and surface it to the UI as a readable "tell".
+        # expose — and surface it to the UI as a readable "tell". (Her rising
+        # temperature from §E2 naturally pushes this down as you crack her.)
         conv = _conviction_from_completion(out, parsed.get("move"))
         if conv is None:  # logprobs unavailable on this build — estimate instead
-            conv = _mock_conviction(opp, parsed)
+            conv = _degrade_conviction(_mock_conviction(opp, parsed), tilt)
             conv["source"] = "estimated"
         parsed["conviction"] = conv
+        parsed["composure"] = composure
         return parsed, raw
 
-    def _complete(self, messages: List[Dict], opp: Opponent):
+    def _complete(self, messages: List[Dict], opp: Opponent, tilt: float = 0.0):
         """create_chat_completion, asking for logprobs; degrade if unsupported.
 
-        Older llama-cpp-python builds reject the OpenAI-style ``logprobs`` /
-        ``top_logprobs`` kwargs — in that case we retry without them and the
-        Conviction Meter falls back to an estimate (see choose_with_raw).
+        ``tilt`` (0..1, §E2) adds to the sampling temperature so a rattled
+        opponent reasons worse. Older llama-cpp-python builds reject the
+        OpenAI-style ``logprobs`` / ``top_logprobs`` kwargs — in that case we
+        retry without them and the Conviction Meter falls back to an estimate.
         """
+        temperature = min(
+            COMPOSURE_TEMP_MAX,
+            0.7 + 0.05 * (5 - opp.difficulty)  # brawlers run hotter
+            + max(0.0, min(1.0, tilt)) * COMPOSURE_TEMP_GAIN,  # +heat as she frays
+        )
         base = dict(
             messages=messages,
             max_tokens=opp.think_tokens + 80,
-            temperature=0.7 + 0.05 * (5 - opp.difficulty),  # brawlers run hotter
+            temperature=temperature,
             top_p=0.9,
         )
         # Ask for the top-K logprob distribution per token (K via CONVICTION_TOPK)
@@ -318,6 +340,46 @@ def _mock_conviction(opp: Opponent, parsed: Dict) -> Dict:
         "score": base, "decision_score": base, "think_score": base,
         "source": "mock", "tokens": tokens, "peak": peak,
     }
+
+
+# ------------------------------------------------------------------------- #
+# Crack Her Composure (IDEAS.md §E2) — derive how rattled the opponent is from
+# PAST outcomes only (never the pending player move), so the blind-commit
+# contract holds. The tilt raises her temperature (real path) and degrades the
+# conviction signal she shows.
+# ------------------------------------------------------------------------- #
+def _composure_tilt(state: Dict) -> float:
+    """0.0 = composed, 1.0 = fully rattled.
+
+    Weighs cumulative HP lost (she bleeds, she frays) with how often the player
+    has recently *landed* on her (successful reads/counters crack composure
+    faster than slow attrition).
+    """
+    ai_hp = state.get("ai_hp", MAX_HP)
+    hp_loss = ((MAX_HP - ai_hp) / MAX_HP) if MAX_HP else 0.0
+    hp_loss = max(0.0, min(1.0, hp_loss))
+    hist = (state.get("history") or [])[-4:]
+    hits = sum(1 for h in hist if str(h.get("outcome", "")).startswith("you landed"))
+    recent = (hits / len(hist)) if hist else 0.0
+    return max(0.0, min(1.0, 0.6 * hp_loss + 0.4 * recent))
+
+
+def _degrade_conviction(conv: Dict | None, tilt: float) -> Dict | None:
+    """Scale a conviction dict down by tilt (mock/estimate path only).
+
+    On the real backend the rising temperature already lowers conviction via
+    genuine entropy; this keeps the mock/estimate path consistent with that.
+    """
+    if not conv or tilt <= 0:
+        return conv
+    f = max(0.0, 1.0 - 0.5 * tilt)
+    for key in ("score", "decision_score", "think_score"):
+        if isinstance(conv.get(key), (int, float)):
+            conv[key] = int(round(conv[key] * f))
+    for tk in conv.get("tokens") or []:
+        if isinstance(tk.get("c"), (int, float)):
+            tk["c"] = int(round(tk["c"] * f))
+    return conv
 
 
 # ------------------------------------------------------------------------- #

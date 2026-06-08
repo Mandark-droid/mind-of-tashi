@@ -193,6 +193,9 @@ async def ai_turn(state_json: str) -> str:
         # Conviction Meter (IDEAS.md §E1): per-token confidence read off the
         # llama.cpp logprobs. None in self-play mode / if the backend omits it.
         "conviction": decision.get("conviction"),
+        # Composure (IDEAS.md §E2): 0-100, how rattled she is. Falls as the
+        # player lands reads/counters; drives her rising temperature.
+        "composure": decision.get("composure"),
         "log": result.log,
         "player_dmg": result.a_dmg_taken,
         "ai_dmg": result.b_dmg_taken,
