@@ -163,13 +163,23 @@ def _history_block(history: List[Dict]) -> str:
     return "Match history so far (your challenger = 'they'):\n" + "\n".join(lines)
 
 
-def build_user(opp: Opponent, state: Dict, legal: List[str]) -> str:
+def build_user(opp: Opponent, state: Dict, legal: List[str], sealed: str = None) -> str:
+    # GRAMMAR-LOCKED OATH (§E3): if the challenger has sealed one of your moves,
+    # name it so the reasoning reroutes around it. The seal is ALSO enforced by a
+    # GBNF grammar, so the move is impossible regardless — this is for the scroll.
+    seal_block = ""
+    if sealed and sealed in MOVES:
+        seal_block = (
+            f"\nA SEAL binds you this round: you CANNOT use {MOVES[sealed]['label']} "
+            f"({sealed}) — the challenger has forbidden it. Feel the pull toward it, "
+            f"then choose another way.\n"
+        )
     return f"""ARENA — round {state['round']}
   You ({opp.name}):      {state['ai_hp']} HP, {state['ai_prana']} prana
   Your challenger:       {state['player_hp']} HP, {state['player_prana']} prana
 
 {_history_block(state.get('history', []))}
-
+{seal_block}
 Moves you can afford this round: {', '.join(legal)}
 
 Read them, then commit. Remember the output format: <think>...</think> then one JSON line."""

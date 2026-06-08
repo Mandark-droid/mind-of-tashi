@@ -93,6 +93,16 @@ class Reasoner:
         equivalent raw string so downstream code can be agnostic.
         """
         legal = [m for m in MOVES if state["ai_prana"] >= MOVES[m]["cost"]]
+        # GRAMMAR-LOCKED OATH (§E3): the player may seal one of her moves this
+        # round (validated + paid for in app.ai_turn). Drop it from her legal set
+        # so the mock can't pick it and parse_reply can't fall back to it; on the
+        # real path it's also enforced by a GBNF grammar below. Blind-commit safe
+        # — a sealed move is public, not the player's pending choice.
+        sealed = (state.get("sealed_move") or "") or None
+        if sealed and sealed in legal and len(legal) > 1:
+            legal = [m for m in legal if m != sealed]
+        else:
+            sealed = None
         # CRACK HER COMPOSURE (§E2): how rattled she is, from past outcomes only
         # (blind-commit safe). Drives temperature on the real path and a wild-
         # swing chance on the mock path; surfaced to the UI as `composure`.
@@ -107,9 +117,12 @@ class Reasoner:
             return parsed, _synthesize_raw(parsed)
         messages = [
             {"role": "system", "content": prompts.build_system(opp)},
-            {"role": "user", "content": prompts.build_user(opp, state, legal)},
+            {"role": "user", "content": prompts.build_user(opp, state, legal, sealed)},
         ]
-        out = self._complete(messages, opp, tilt)
+        # When an oath is active, force the move token via GBNF so the sealed move
+        # is literally undecodable — the mind-scroll reroutes around the hole.
+        grammar_src = _move_grammar(legal) if sealed else None
+        out = self._complete(messages, opp, tilt, grammar_src)
         raw = out["choices"][0]["message"]["content"]
         parsed = prompts.parse_reply(raw, legal)
         # CONVICTION METER (IDEAS.md §E1): read the model's per-token confidence
@@ -124,13 +137,16 @@ class Reasoner:
         parsed["composure"] = composure
         return parsed, raw
 
-    def _complete(self, messages: List[Dict], opp: Opponent, tilt: float = 0.0):
-        """create_chat_completion, asking for logprobs; degrade if unsupported.
+    def _complete(self, messages: List[Dict], opp: Opponent, tilt: float = 0.0,
+                  grammar_src: str | None = None):
+        """create_chat_completion with logprobs (+ optional GBNF grammar).
 
         ``tilt`` (0..1, §E2) adds to the sampling temperature so a rattled
-        opponent reasons worse. Older llama-cpp-python builds reject the
-        OpenAI-style ``logprobs`` / ``top_logprobs`` kwargs — in that case we
-        retry without them and the Conviction Meter falls back to an estimate.
+        opponent reasons worse. ``grammar_src`` (§E3) is a GBNF string that
+        forces the move token — passed best-effort: if grammar load or a
+        grammar-constrained generation fails, we retry without it (the legal
+        filter still enforces the seal). Logprobs are requested in whichever
+        dialect this llama-cpp build speaks; any failure degrades the meter.
         """
         temperature = min(
             COMPOSURE_TEMP_MAX,
@@ -143,18 +159,26 @@ class Reasoner:
             temperature=temperature,
             top_p=0.9,
         )
-        # Ask for the top-K logprob distribution per token (K via CONVICTION_TOPK)
-        # so conviction can be measured as distribution entropy, not just the
-        # emitted token's probability. Try whichever dialect this llama-cpp build
-        # speaks: OpenAI-style (bool + top_logprobs) first, then the integer
-        # form, then bare. Any failure degrades the meter to an estimate.
-        k = CONVICTION_TOPK
-        for kwargs in ({"logprobs": True, "top_logprobs": k}, {"logprobs": k}, {}):
+
+        def _try(extra: Dict):
+            # Try the top-K logprob dialects in turn (OpenAI bool+top_logprobs,
+            # then int, then bare); return the first that the build accepts.
+            last = None
+            for lp in ({"logprobs": True, "top_logprobs": CONVICTION_TOPK},
+                       {"logprobs": CONVICTION_TOPK}, {}):
+                try:
+                    return self.llm.create_chat_completion(**base, **extra, **lp)
+                except (TypeError, ValueError) as exc:
+                    last = exc
+            raise last if last else RuntimeError("create_chat_completion failed")
+
+        grammar = _load_grammar(grammar_src)
+        if grammar is not None:
             try:
-                return self.llm.create_chat_completion(**base, **kwargs)
-            except (TypeError, ValueError) as exc:
-                print(f"[llm] logprobs variant {kwargs or '{}'} rejected ({exc}); trying next")
-        return self.llm.create_chat_completion(**base)
+                return _try({"grammar": grammar})
+            except Exception as exc:  # grammar kwarg/gen unsupported — drop it
+                print(f"[llm] GBNF grammar path failed ({exc}); retrying without")
+        return _try({})
 
 
 def _synthesize_raw(parsed: Dict) -> str:
@@ -380,6 +404,41 @@ def _degrade_conviction(conv: Dict | None, tilt: float) -> Dict | None:
         if isinstance(tk.get("c"), (int, float)):
             tk["c"] = int(round(tk["c"] * f))
     return conv
+
+
+# ------------------------------------------------------------------------- #
+# Grammar-Locked Oath (IDEAS.md §E3) — when the player seals a move, build a
+# GBNF grammar that lets the model think freely (<think>…</think>) but forces
+# the committed move token to one of the still-allowed moves. The sealed move
+# becomes literally undecodable; the mind-scroll reroutes around the hole.
+# ------------------------------------------------------------------------- #
+def _move_grammar(allowed: List[str]) -> str:
+    """A GBNF grammar permitting a free-form think block then a JSON object whose
+    ``move`` is one of ``allowed``. (``[^<]*`` for the think body assumes the
+    reasoning has no stray ``<`` — true for our bilingual scrolls.)"""
+    alts = " | ".join('"\\"' + m + '\\""' for m in allowed) or '"\\"FOCUS\\""'
+    return (
+        'root ::= think ws obj\n'
+        'think ::= "<think>" tbody "</think>"\n'
+        'tbody ::= [^<]*\n'
+        'obj ::= "{" ws "\\"move\\"" ws ":" ws move ws "," ws "\\"taunt\\"" ws ":" ws str ws "}"\n'
+        'move ::= ' + alts + '\n'
+        'str ::= "\\"" ([^"\\\\] | "\\\\" .)* "\\""\n'
+        'ws ::= [ \\t\\n]*\n'
+    )
+
+
+def _load_grammar(src: str | None):
+    """Compile a GBNF string to a LlamaGrammar, or None (caller proceeds
+    without the hard constraint; the legal filter still enforces the seal)."""
+    if not src:
+        return None
+    try:
+        from llama_cpp import LlamaGrammar  # noqa: WPS433
+        return LlamaGrammar.from_string(src, verbose=False)
+    except Exception as exc:
+        print(f"[llm] grammar load failed ({exc}); proceeding without GBNF")
+        return None
 
 
 # ------------------------------------------------------------------------- #

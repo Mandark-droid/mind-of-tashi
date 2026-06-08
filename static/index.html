@@ -515,6 +515,20 @@
   @keyframes cmjitter{0%{transform:translate(0,0)}50%{transform:translate(.6px,-.6px)}100%{transform:translate(-.6px,.6px)}}
   @media (prefers-reduced-motion: reduce){ .footer-scroll.rattled .hdr .dot{animation:none} .footer-scroll .hdr .cm .cm-fill{transition:none} }
 
+  /* ---- GRAMMAR-LOCKED OATH (IDEAS.md §E3) -------------------------- */
+  /* Spend prāṇa to forbid the opponent a move — her decode grammar drops the
+     token, so she literally cannot choose it and her reasoning reroutes. */
+  .oath-bar{margin-top:8px; padding:8px 9px; border:1px solid var(--line); border-radius:8px; background:rgba(20,28,38,.42)}
+  .oath-bar .oath-hd{font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--bone-dim); display:flex; align-items:center; gap:6px; margin-bottom:6px}
+  .oath-bar.armed .oath-hd{color:#ffcf6b}
+  .oath-row{display:flex; gap:4px; flex-wrap:wrap}
+  .oath-row .ob{flex:0 0 auto; width:30px; height:30px; display:grid; place-items:center; font-size:15px; border:1px solid var(--line); border-radius:6px; background:rgba(255,255,255,.03); cursor:pointer; transition:transform .12s, border-color .2s, background .2s; color:var(--bone)}
+  .oath-row .ob:hover:not(:disabled){transform:translateY(-1px); border-color:var(--accent)}
+  .oath-row .ob.sel{border-color:#ffcf6b; background:rgba(255,207,107,.16); box-shadow:0 0 8px rgba(255,207,107,.35)}
+  .oath-row .ob:disabled{opacity:.32; cursor:not-allowed}
+  .oath-bar .oath-note{margin-top:6px; font-size:10.5px; color:var(--bone-dim); min-height:1.2em; line-height:1.3}
+  .oath-bar.armed .oath-note{color:#ffcf6b}
+
   /* ---- MOBILE FALLBACK --------------------------------------------- */
   @media (max-width:900px){
     :root{ --header-h:54px; --left-w:0px; --right-w:0px; --footer-h:auto }
@@ -1049,6 +1063,8 @@
   <aside class="left-rail">
     <div class="rail-label">Your Moves</div>
     <div class="sb-moves" id="moves"></div>
+    <!-- E3: Grammar-Locked Oath — seal one of her moves for the round -->
+    <div class="oath-bar" id="oathBar" style="display:none"></div>
     <div class="rail-label" style="margin-top:6px">Round Log</div>
     <div class="sb-log" id="log"></div>
   </aside>
@@ -1527,6 +1543,7 @@
     // A1: reset the prana-rise tracking so the first renderState of the
     // new fight doesn't fire a flicker on the START_PRANA value.
     lastPlPrana = -1; lastOppPrana = -1;
+    pendingOath = null;  // E3: clear any armed seal when a new fight begins
     // A3: reset weather classes — every new fight starts in clear weather.
     const stage = $("stage");
     if (stage){ stage.classList.remove("weather-flurry", "weather-blizzard"); }
@@ -1550,14 +1567,50 @@
 
   function renderMoves(){
     const box = $("moves"); box.innerHTML = "";
+    // E3: an armed oath spends prāṇa first, so fewer prāṇa remain for your move.
+    const oathDraw = (pendingOath && META.oath_cost) ? META.oath_cost : 0;
+    const effPrana = (state ? state.player_prana : 0) - oathDraw;
     META.moves.forEach(m => {
       const b = document.createElement("button");
       b.className = "mv"; b.dataset.move = m.id;
-      b.disabled = state.player_prana < m.cost || busy;
+      b.disabled = effPrana < m.cost || busy;
       b.title = m.blurb;
       b.innerHTML = `<span class="g">${m.glyph}</span><span class="l">${m.label}</span><span class="c ${m.cost? "":"free"}">${m.cost? m.cost+" prana" : "free"}</span>`;
       b.onclick = () => commit(m.id);
       box.appendChild(b);
+    });
+    renderOath();
+  }
+
+  // E3 GRAMMAR-LOCKED OATH — pick a move to forbid the opponent this round.
+  // Sends `state.oath`; the server charges prāṇa and the model's decode grammar
+  // drops the token. One-round effect, cleared after each commit.
+  let pendingOath = null;
+  function renderOath(){
+    const bar = $("oathBar");
+    if (!bar) return;
+    if (selfplayMode || !META.oath_cost || !state){ bar.style.display = "none"; return; }
+    bar.style.display = "";
+    const cost = META.oath_cost;
+    const canAfford = state.player_prana >= cost;
+    bar.classList.toggle("armed", !!pendingOath);
+    const rows = META.moves.map(m => {
+      const sel = pendingOath === m.id ? " sel" : "";
+      const dis = (busy || (!canAfford && pendingOath !== m.id)) ? "disabled" : "";
+      return `<button class="ob${sel}" data-oath="${m.id}" title="Seal ${m.label} — she cannot use it this round" ${dis}>${m.glyph}</button>`;
+    }).join("");
+    const sealedLabel = (META.moves.find(x => x.id === pendingOath) || {}).label || pendingOath;
+    const note = pendingOath
+      ? `Sealed: <b>${sealedLabel}</b> — she cannot use it. (−${cost} prāṇa)`
+      : (canAfford ? `Spend ${cost} prāṇa to forbid her a move this round.`
+                   : `Need ${cost} prāṇa to seal a move.`);
+    bar.innerHTML = `<div class="oath-hd"><span>🔒</span><span>Oath — seal her move</span></div>`
+                  + `<div class="oath-row">${rows}</div>`
+                  + `<div class="oath-note">${note}</div>`;
+    bar.querySelectorAll(".ob").forEach(b => b.onclick = () => {
+      const mv = b.dataset.oath;
+      pendingOath = (pendingOath === mv) ? null : mv;
+      renderMoves();   // re-render so move affordability reflects the oath cost
     });
   }
   // A3: ambient wind-gust ticker. Self-driving setTimeout loop — interval
@@ -1629,6 +1682,7 @@
       stage.classList.toggle("weather-flurry",   state.round >= 6 && state.round < 14);
       stage.classList.toggle("weather-blizzard", state.round >= 14);
     }
+    renderOath();  // E3: refresh seal affordability when prāṇa changes
   }
   const pct = hp => Math.max(0, Math.min(100, hp/META.max_hp*100));
   function drops(box, n){
@@ -1657,6 +1711,7 @@
     { const m = $("cmMeter"); if (m) m.style.visibility = "hidden"; }  // (composure too)
     startReadingRotation();
     state.player_move = playerMove;
+    state.oath = pendingOath || null;   // E3: the seal travels with the commit
     let data;
     try {
       if (!client) client = await Client.connect(window.location.origin);
@@ -1676,7 +1731,13 @@
     state.match_id = data.match_id || state.match_id;
     lastMatchId = state.match_id || lastMatchId;
     lastStatus = data.status;
-    delete state.player_move; renderState();
+    delete state.player_move; delete state.oath; renderState();
+    // E3: confirm the seal in the log, then clear it (one-round effect)
+    if (data.oath && data.oath.sealed){
+      const sl = (META.moves.find(m=>m.id===data.oath.sealed)||{}).label || data.oath.sealed;
+      addLog(`<span style="color:#ffcf6b">🔒 You sealed <i>${escapeHtml(sl)}</i> (−${data.oath.cost} prāṇa) — she could not use it</span>`);
+    }
+    pendingOath = null;
     // Cinematic round opener — a 2-line beat that surfaces what each
     // side actually committed, before the engine's resolve-log narrative
     // lines (those come from RoundResult.log and stay verbatim). The

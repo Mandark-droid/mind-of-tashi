@@ -47,7 +47,10 @@ def main() -> int:
     ap.add_argument("--opponent", default="tashi")
     ap.add_argument("--rounds", type=int, default=5)
     ap.add_argument("--cpu", action="store_true", help="force N_GPU_LAYERS=0")
+    ap.add_argument("--seal", default=None,
+                    help="seal this opponent move id every round (tests the E3 GBNF grammar)")
     args = ap.parse_args()
+    seal = args.seal.upper() if args.seal else None
 
     if args.cpu:
         os.environ["N_GPU_LAYERS"] = "0"
@@ -86,7 +89,11 @@ def main() -> int:
     with open(outfile, "w", encoding="utf-8") as fout:
         for i in range(args.rounds):
             pm = player_moves[i % len(player_moves)]
+            if seal:
+                state["sealed_move"] = seal  # E3: forbid this move via GBNF each round
             parsed, _raw = r.choose_with_raw(opp, state)
+            if seal and parsed["move"] == seal:
+                print(f"  !! SEAL BREACH: she played the sealed move {seal}")
             cv = parsed.get("conviction") or {}
             if cv.get("source") == "llama.cpp":
                 real_turns += 1

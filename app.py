@@ -73,6 +73,10 @@ with open(INDEX, "r", encoding="utf-8") as _fh:
 # /whoami always reports signed_in=False and the UI falls back to a typed name.
 ON_SPACE = bool(os.environ.get("SPACE_ID"))
 
+# GRAMMAR-LOCKED OATH (IDEAS.md §E3): prana the player spends to seal one of the
+# opponent's moves for a round. Env-tunable so the cost can be balanced.
+OATH_COST = int(os.environ.get("OATH_COST", "2"))
+
 app = Server()
 # Serve the arena backdrops (mp4 / webp / png) referenced by the frontend.
 # Without this mount, /assets/village.mp4 etc. 404 and the page falls back
@@ -95,6 +99,7 @@ def _meta() -> dict:
         "max_hp": engine.MAX_HP,
         "max_prana": engine.MAX_PRANA,
         "start_prana": engine.START_PRANA,
+        "oath_cost": OATH_COST,  # §E3: prana to seal an opponent move
         "moves": [
             {"id": mid, "label": m["label"], "cost": m["cost"],
              "glyph": m["glyph"], "blurb": m["blurb"], "kind": m["kind"]}
@@ -130,6 +135,20 @@ async def ai_turn(state_json: str) -> str:
     match_id = state.get("match_id")
     if not match_id or state.get("round") == 1:
         match_id = live_traces.new_match_id()
+
+    # GRAMMAR-LOCKED OATH (§E3): the player may spend prana to SEAL one of the
+    # opponent's moves this round. Validate + charge server-side; the seal is
+    # enforced in llm.choose_with_raw (legal filter + GBNF). This is a declared
+    # resource action, NOT the player's pending move — blind-commit is intact.
+    sealed_move = None
+    oath_req = str(state.get("oath") or "").upper().replace(" ", "_")
+    if oath_req in engine.MOVES:
+        ai_legal = [m for m in engine.MOVES if state["ai_prana"] >= engine.MOVES[m]["cost"]]
+        if (oath_req in ai_legal and state["player_prana"] >= OATH_COST
+                and len([m for m in ai_legal if m != oath_req]) >= 1):
+            sealed_move = oath_req
+            state["player_prana"] = state["player_prana"] - OATH_COST  # pay before resolve
+    state["sealed_move"] = sealed_move
 
     player = engine.Fighter("you", hp=state["player_hp"], prana=state["player_prana"])
     ai = engine.Fighter(opp.name, hp=state["ai_hp"], prana=state["ai_prana"])
@@ -196,6 +215,10 @@ async def ai_turn(state_json: str) -> str:
         # Composure (IDEAS.md §E2): 0-100, how rattled she is. Falls as the
         # player lands reads/counters; drives her rising temperature.
         "composure": decision.get("composure"),
+        # Oath (IDEAS.md §E3): which move the player sealed this round (+ cost),
+        # echoed back so the UI can confirm it and log the binding. None if no
+        # valid oath was cast.
+        "oath": ({"sealed": sealed_move, "cost": OATH_COST} if sealed_move else None),
         "log": result.log,
         "player_dmg": result.a_dmg_taken,
         "ai_dmg": result.b_dmg_taken,
