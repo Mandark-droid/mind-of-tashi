@@ -1,12 +1,14 @@
 # The Mind of Tashi — Docker Space.
-# Docker (not the gradio SDK) so we can install a C/C++ toolchain and compile
-# llama-cpp-python from source — the llama.cpp runtime that earns the
-# Off-the-Grid + Llama-Champion badges. No cloud API at request time.
+# Docker (not the gradio SDK) so we control the llama.cpp install: we pull the
+# PREBUILT CPU wheel for llama-cpp-python rather than compiling from source
+# (a source compile OOM-kills the free build runner — exit 137). No cloud API
+# at request time — the Off-the-Grid + Llama-Champion contract.
 FROM python:3.12-slim
 
-# Build toolchain for llama-cpp-python + libgomp for its OpenMP runtime.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential cmake git libgomp1 \
+# libgomp1 = the OpenMP runtime llama.cpp needs. No compiler toolchain: the
+# wheel is prebuilt, so build-essential/cmake are unnecessary (smaller image,
+# faster build, and no OOM).
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # HF Spaces run containers as uid 1000; give it a writable home + HF cache.
@@ -22,9 +24,14 @@ ENV HOME=/home/user \
 
 WORKDIR /home/user/app
 
-# Install deps first for layer caching (llama-cpp-python compiles here).
+# The extra index serves prebuilt CPU wheels for llama-cpp-python;
+# --only-binary on that package forces the wheel (fail fast if one is missing,
+# never fall back to an OOM source compile). Everything else comes from PyPI.
 COPY --chown=user requirements.txt ./
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --user \
+        --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu \
+        --only-binary=llama-cpp-python \
+        -r requirements.txt
 
 # App code (engine, llm, prompts, opponents, static frontend, assets, …).
 COPY --chown=user . ./
