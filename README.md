@@ -5,7 +5,7 @@ colorFrom: indigo
 colorTo: gray
 sdk: docker
 app_port: 7860
-pinned: false
+pinned: true
 license: mit
 hf_oauth: true
 models:

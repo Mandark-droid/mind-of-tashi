@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>The Mind of Tashi — a duel of foresight</title>
+<link rel="icon" type="image/png" href="/assets/logo.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Eczar:wght@500;600;700&family=Mukta:wght@300;400;500;600&family=VT323&display=swap" rel="stylesheet" />
@@ -174,6 +175,18 @@
   .pip:nth-child(1){color:var(--flag-1)} .pip:nth-child(2){color:var(--flag-2)}
   .pip:nth-child(3){color:var(--flag-3)} .pip:nth-child(4){color:var(--flag-4)} .pip:nth-child(5){color:var(--flag-5)}
   .topbar .backend{font-size:10px; color:var(--bone-dim); letter-spacing:.1em; text-transform:uppercase; opacity:.7}
+  .topbar .brand-logo{height:36px; width:36px; border-radius:50%; object-fit:cover;
+    box-shadow:0 0 14px rgba(108,182,255,.3); flex:0 0 auto}
+  /* Between-rounds interlude: brief full-screen splash on level advance. */
+  #interlude{position:fixed; inset:0; z-index:60; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; background:rgba(8,11,16,.93);
+    opacity:0; transition:opacity .45s ease; pointer-events:none}
+  #interlude.show{opacity:1}
+  #interlude img{max-width:min(72vw,560px); max-height:62vh; border-radius:14px;
+    box-shadow:0 0 70px rgba(108,182,255,.28)}
+  #interlude .cap{margin-top:18px; font-family:"Eczar"; letter-spacing:.12em;
+    color:var(--bone); font-size:15px; text-transform:uppercase; opacity:.92; text-align:center}
+  @media (prefers-reduced-motion: reduce){ #interlude{transition:none} }
 
   /* ---- HP CORNER CARDS (under header, anchored to duel area corners) - */
   .hp-corner{
@@ -925,6 +938,7 @@
   <!-- HEADER: brand + ladder pips + backend tag -->
   <header class="topbar">
     <div class="brand-row">
+      <img class="brand-logo" src="/assets/logo.png" alt="The Mind of Tashi" />
       <span class="deva">॥ धुंध ॥</span>
       <h1>THE MIND OF TASHI</h1>
       <div class="pips" id="pips"></div>
@@ -937,6 +951,13 @@
       <button class="lb-link" id="openLb" title="Show the climbers' board">▲ Leaderboard</button>
     </div>
   </header>
+
+  <!-- BETWEEN-ROUNDS INTERLUDE: brief splash shown on level advance
+       (showInterlude() in the JS; auto-dismisses after ~2s). -->
+  <div id="interlude" class="hide" aria-hidden="true">
+    <img src="/assets/interlude.png" alt="" />
+    <div class="cap" id="interludeCap"></div>
+  </div>
 
   <!-- HELP MODAL: moves catalogue + game rules. Hidden by default; the
        openHelp button toggles .hide off. Built from META.moves so the
@@ -2334,6 +2355,21 @@
   function addLog(line){
     const d = document.createElement("div"); d.innerHTML = `<b>R${state.round}.</b> ${line}`; $("log").prepend(d);
   }
+  // Between-rounds interlude — flash the duel splash for ~2s, then continue.
+  // Skipped in self-play (the watcher wants no pauses) and under reduced-motion.
+  function showInterlude(caption, done){
+    const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const el = $("interlude");
+    if (selfplayMode || reduce || !el){ if (done) done(); return; }
+    $("interludeCap").textContent = caption || "";
+    el.classList.remove("hide");
+    requestAnimationFrame(() => el.classList.add("show"));
+    setTimeout(() => {
+      el.classList.remove("show");
+      setTimeout(() => { el.classList.add("hide"); if (done) done(); }, 450);
+    }, 2000);
+  }
+
   function endRound(data){
     const opp = META.ladder[ladderIndex];
     const o = $("overlay"), b2 = $("cardBtn2"); b2.style.display = "none";
@@ -2385,7 +2421,7 @@
       $("cardEm").textContent = nxt.glyph; $("cardTitle").textContent = `${opp.name} falls`;
       $("cardSub").textContent = `next: ${nxt.name}, ${nxt.title}`; $("cardBio").textContent = nxt.bio;
       $("cardBtn").textContent = "Face " + nxt.name;
-      $("cardBtn").onclick = () => { o.classList.add("hide"); newFight(); };
+      $("cardBtn").onclick = () => { o.classList.add("hide"); showInterlude(`${opp.name} falls — next: ${nxt.name}`, newFight); };
       // self-play: auto-click "Face Next" after a short pause so the watcher
       // can read the result card before the next match starts.
       if (selfplayMode) setTimeout(() => $("cardBtn").click(), 1800);
