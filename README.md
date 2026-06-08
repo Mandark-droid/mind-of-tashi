@@ -8,9 +8,6 @@ app_port: 7860
 pinned: false
 license: mit
 hf_oauth: true
-hf_oauth_scopes:
-  - openid
-  - profile
 models:
   - build-small-hackathon/mind-of-tashi-micro-sft-gguf
 datasets:
