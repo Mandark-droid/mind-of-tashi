@@ -1,51 +1,18 @@
-# --- The Mind of Tashi: dependencies -----------------------------------------
+# --- The Mind of Tashi: runtime deps for the deployed Space ------------------
+# Off-the-Grid: ONLY what the playable game's import graph needs. No cloud-API
+# SDKs, no telemetry here. The opponent runs as a local GGUF via llama.cpp.
+# Self-play harvest + Modal training extras live in requirements-dev.txt
+# (app.py loads the teacher pool lazily and disables OTEL at runtime, so the
+# Space never imports them).
+#
 # Gradio 6 brings gradio.Server (custom frontend + Gradio backend). FastAPI is
 # pinned explicitly because app.py imports `fastapi.responses.HTMLResponse`
-# directly — relying on it as a transitive dep of gradio is fragile across
-# gradio releases. Installing both here keeps `pip install -r requirements.txt`
-# self-sufficient for local dev; on Spaces, the sdk_version in README.md also
-# pins the gradio runtime.
-# Track Gradio 6.15+ — major perf improvements landed late May 2026 and we
-# want to be among the early adopters in the Hub-side gradio-hackathon-all-
-# stars community. Files filed early bugs (if any) for credit; the README
-# frontmatter pins sdk_version: 6.15.0 to match the deployed Space runtime.
+# directly — relying on it as a transitive dep of gradio is fragile.
 gradio>=6.15
 fastapi>=0.115
 
-# Opponent runtime: a small reasoning model via llama.cpp.
-# This is the path that earns the Off-the-Grid (no cloud API) and Llama Champion
-# badges. First Space boot compiles a CPU backend, which can take a few minutes.
-# If llama_cpp is absent or no model is fetched, the app auto-falls back to the
-# built-in mock opponent, so it always runs.
+# Opponent runtime: a small reasoning model via llama.cpp — the Off-the-Grid +
+# Llama-Champion contract. The Docker build compiles this against the toolchain
+# the Dockerfile installs (build-essential + cmake).
 llama-cpp-python>=0.3.0
 huggingface_hub>=0.27.0
-
-# --- self-play / training data harvest (dev-only, not used by the live game) -
-# These are imported by tools/selfplay.py only. Kept here (not in a separate
-# requirements-dev.txt) because a single `pip install -r requirements.txt` is
-# the project's documented install path. On Spaces these still install but
-# nothing imports them at request time.
-python-dotenv>=1.0
-
-# LLM SDKs for the self-play teachers. We use the official Python clients
-# (not raw aiohttp) so genai-otel-instrument's built-in instrumentors fire
-# automatically and emit gen_ai.* spans with token-count / cost / eval
-# enrichment. openai's client also covers OpenRouter, Mistral, and Sarvam
-# via per-provider base_url overrides.
-google-genai>=0.3
-openai>=1.50
-ollama>=0.4
-
-# --- Observability for data-generation runs (self-play + live capture) -------
-# `genai-otel-instrument` auto-traces LLM SDKs (openai/google-genai/ollama/
-# anthropic/...) with no code changes, plus optional GPU / cost / CO2 / eval
-# metrics. Telemetry ships OTLP/HTTP to the collector on our traceverse VM.
-# Bootstrap lives in `otel_bootstrap.py`; toggle with GENAI_OTEL_DISABLE=1.
-# The [gpu] extra pulls pynvml for NVIDIA GPU metrics — harmless on CPU-only
-# boxes (it just reports no GPUs).
-genai-otel-instrument[gpu]>=0.1
-# genai-otel-instrument's openai/ollama wrappers are unreliable in v1.3.1
-# (they log "enabled" but no spans land). Both SDKs ride on httpx, so we
-# instrument that layer directly — every LLM call shows up as a span with
-# URL + status + duration.
-opentelemetry-instrumentation-httpx>=0.50

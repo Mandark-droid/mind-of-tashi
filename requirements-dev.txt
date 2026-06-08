@@ -1,0 +1,23 @@
+# --- The Mind of Tashi: dev-only deps (self-play harvest + Modal training) ---
+# NOT needed by the deployed Space. Its import graph loads the teacher pool
+# lazily (selfplay_live -> `from teachers import make_teacher` inside a function)
+# and otel_bootstrap.init_otel() no-ops under GENAI_OTEL_DISABLE=1, so none of
+# these are imported at game runtime. Install for harvest / training:
+#     pip install -r requirements-dev.txt
+-r requirements.txt
+
+python-dotenv>=1.0
+
+# LLM SDKs for the self-play teachers. openai's client also covers OpenRouter,
+# Mistral, and Sarvam via per-provider base_url overrides.
+google-genai>=0.3
+openai>=1.50
+ollama>=0.4
+
+# Observability for data-generation runs. genai-otel-instrument auto-traces the
+# LLM SDKs; the httpx instrumentor catches the OpenAI-compatible teachers.
+# NOTE: opentelemetry-instrumentation-httpx only publishes pre-releases
+# (0.50b0, 0.63b1, …), so the floor must allow betas — `>=0.50` matches no
+# final release and breaks resolution.
+genai-otel-instrument[gpu]>=0.1
+opentelemetry-instrumentation-httpx>=0.50b0
