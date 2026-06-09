@@ -2112,6 +2112,25 @@
     ctx.fillStyle = opp.accent;
     ctx.fillRect(mx, my + 14, 6, mh - 28);
 
+    // ---- 3b. LOGO SEAL — brand medallion pinned to the card's top edge.
+    // Clipped to a circle (the emblem is inscribed in a dark square) with an
+    // ember ring, so it reads as a wax seal rather than a pasted square.
+    const seal = await loadImg("/assets/logo.png");
+    if (seal){
+      const sr = 58, scx = W/2, scy = my;
+      ctx.save();
+      ctx.beginPath(); ctx.arc(scx, scy, sr, 0, Math.PI*2); ctx.closePath();
+      ctx.shadowColor = "rgba(108,182,255,.40)"; ctx.shadowBlur = 26;
+      ctx.fillStyle = "#0d1117"; ctx.fill();        // backing disc + glow
+      ctx.shadowBlur = 0; ctx.clip();
+      ctx.drawImage(seal, scx - sr, scy - sr, sr*2, sr*2);
+      ctx.restore();
+      ctx.save();                                    // ember ring
+      ctx.beginPath(); ctx.arc(scx, scy, sr, 0, Math.PI*2);
+      ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(232,161,58,.75)"; ctx.stroke();
+      ctx.restore();
+    }
+
     // ---- 4. TITLE BLOCK
     ctx.textAlign = "center";
     // small kicker
