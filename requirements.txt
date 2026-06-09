@@ -7,7 +7,7 @@
 # repo and `docker build` (see Dockerfile + requirements-llamacpp.txt), or
 # `pip install llama-cpp-python` and set BACKEND=llamacpp. Same model, two
 # runtimes — the Space picks transformers+ZeroGPU via BACKEND=transformers.
-gradio>=6.15
+gradio[oauth]>=6.15
 spaces
 transformers>=5.5
 torch>=2.8

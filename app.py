@@ -78,6 +78,16 @@ ON_SPACE = bool(os.environ.get("SPACE_ID"))
 OATH_COST = int(os.environ.get("OATH_COST", "2"))
 
 app = Server()
+# Mount the HF OAuth routes (/login/huggingface, /login/callback, /logout) and
+# the session middleware that /whoami reads. On a Gradio-SDK Space our custom
+# gradio.Server isn't auto-wired for OAuth, so attach it explicitly — otherwise
+# "Sign in with HF" 404s. attach_oauth uses real routes on a Space and mocked
+# ones locally; guarded so a failure never blocks boot.
+try:
+    from gradio.oauth import attach_oauth
+    attach_oauth(app)
+except Exception as _oauth_exc:  # noqa: BLE001
+    print(f"[app] OAuth not attached: {_oauth_exc}")
 # Serve the arena backdrops (mp4 / webp / png) referenced by the frontend.
 # Without this mount, /assets/village.mp4 etc. 404 and the page falls back
 # to the poster image only (or a black sky if posters are missing too).

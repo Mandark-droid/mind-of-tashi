@@ -2148,6 +2148,20 @@
     const tileW = (mw - 100) / 2;
     const lx = mx + 30, rx = mx + mw - 30 - tileW;
 
+    // Faint duel-emblem accent behind the tiles — the two-monk versus art shows
+    // through the centre gap, behind the "vs". Drawn first so the tiles sit on top.
+    const vbg = await loadImg("/assets/versus.png");
+    if (vbg){
+      const bandX = mx + 12, bandY = tileY - 18, bandW = mw - 24, bandH = tileH + 36;
+      ctx.save();
+      roundRect(ctx, bandX, bandY, bandW, bandH, 16); ctx.clip();
+      ctx.globalAlpha = 0.22;
+      const sc = Math.max(bandW / vbg.width, bandH / vbg.height);
+      const dw = vbg.width * sc, dh = vbg.height * sc;
+      ctx.drawImage(vbg, mx + mw/2 - dw/2, bandY + bandH/2 - dh/2, dw, dh);
+      ctx.restore();
+    }
+
     drawPersonaTile(ctx, lx, tileY, tileW, tileH, {
       glyph: "🌫",          // the challenger is glyph-agnostic; mist icon stands in
       name:  r.playerName || "Challenger",
