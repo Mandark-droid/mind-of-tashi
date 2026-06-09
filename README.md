@@ -34,6 +34,11 @@ datasets:
 > Built for the **Build Small Hackathon · Track Two: An Adventure in Thousand
 > Token Wood**.
 
+**▶️ [Play the Space](https://huggingface.co/spaces/build-small-hackathon/mind-of-tashi) ·
+🎬 [Watch the demo](https://www.linkedin.com/posts/kshitij-thakkar-2061b924_buildsmallhackathon-thousandtokenwood-smallmodels-activity-7470170147283017729-UfCR) (on LinkedIn) ·
+📦 [The bundle](https://huggingface.co/collections/build-small-hackathon/the-mind-of-tashi-6a27107214f1265b159ade35) ·
+💻 [Code](https://github.com/Mandark-droid/mind-of-tashi)**
+
 You climb a gauntlet of ninja-monks in the Village Hidden in the Mist, high in
 the Himalayas. Every round, you and your opponent **secretly commit one move at
 the same time** — there is no reacting, only *reading*. The opponent is a small
@@ -158,6 +163,12 @@ A **Build Small Hackathon (Track Two)** submission, made possible by:
 - **[NVIDIA](https://www.nvidia.com/)** — the silicon under all of it: ZeroGPU's
   RTX Pro 6000 Blackwell at runtime, L4 for training on Modal, and a local
   RTX 3060 for the dev loop.
+
+## Watch & follow
+
+- 🎬 **Demo video** (posted on LinkedIn): [watch the duel](https://www.linkedin.com/posts/kshitij-thakkar-2061b924_buildsmallhackathon-thousandtokenwood-smallmodels-activity-7470170147283017729-UfCR)
+- 💼 **LinkedIn** announcement: [the post](https://www.linkedin.com/posts/kshitij-thakkar-2061b924_buildsmallhackathon-thousandtokenwood-smallmodels-activity-7470170147283017729-UfCR)
+- 🐦 **X / Twitter** announcement: [the thread](https://x.com/Mandark12921244/status/2064405594044547331)
 
 ## Layout
 
