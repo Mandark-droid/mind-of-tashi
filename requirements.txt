@@ -1,18 +1,15 @@
-# --- The Mind of Tashi: runtime deps for the deployed Space ------------------
-# Off-the-Grid: ONLY what the playable game's import graph needs. No cloud-API
-# SDKs, no telemetry here. The opponent runs as a local GGUF via llama.cpp.
-# Self-play harvest + Modal training extras live in requirements-dev.txt
-# (app.py loads the teacher pool lazily and disables OTEL at runtime, so the
-# Space never imports them).
+# --- The Mind of Tashi: deployed Space runtime (Gradio SDK + ZeroGPU) --------
+# The opponent runs on a dynamically-allocated local GPU via @spaces.GPU
+# (transformers / PyTorch). Off-the-Grid: no cloud-API SDKs here — the model is
+# local, the GPU is local; nothing phones a cloud provider at request time.
 #
-# Gradio 6 brings gradio.Server (custom frontend + Gradio backend). FastAPI is
-# pinned explicitly because app.py imports `fastapi.responses.HTMLResponse`
-# directly — relying on it as a transitive dep of gradio is fragile.
+# The llama.cpp / GGUF runtime (Llama Champion) is the LOCAL path: clone the
+# repo and `docker build` (see Dockerfile + requirements-llamacpp.txt), or
+# `pip install llama-cpp-python` and set BACKEND=llamacpp. Same model, two
+# runtimes — the Space picks transformers+ZeroGPU via BACKEND=transformers.
 gradio>=6.15
-fastapi>=0.115
-
-# Opponent runtime: a small reasoning model via llama.cpp — the Off-the-Grid +
-# Llama-Champion contract. The Docker build compiles this against the toolchain
-# the Dockerfile installs (build-essential + cmake).
-llama-cpp-python>=0.3.0
+spaces
+transformers>=5.5
+torch>=2.8
+accelerate
 huggingface_hub>=0.27.0

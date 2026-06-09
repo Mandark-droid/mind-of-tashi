@@ -1,0 +1,10 @@
+# --- The Mind of Tashi: LOCAL llama.cpp runtime (Llama Champion) -------------
+# Used by the Dockerfile. Clone + `docker build` => the opponent runs as a GGUF
+# via llama.cpp — no GPU, no cloud API (Off-the-Grid + Llama Champion). The
+# deployed HF Space instead runs Gradio SDK + ZeroGPU (see requirements.txt);
+# this is the self-host / "run it on llama.cpp once cloned" path.
+#   pip install -r requirements-llamacpp.txt   # then BACKEND=llamacpp python app.py
+gradio>=6.15
+fastapi>=0.115
+llama-cpp-python>=0.3.0
+huggingface_hub>=0.27.0

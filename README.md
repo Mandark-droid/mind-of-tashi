@@ -3,12 +3,14 @@ title: The Mind of Tashi
 emoji: 🌫️
 colorFrom: indigo
 colorTo: gray
-sdk: docker
-app_port: 7860
+sdk: gradio
+sdk_version: 6.15.0
+app_file: app.py
 pinned: true
 license: mit
 hf_oauth: true
 models:
+  - build-small-hackathon/mind-of-tashi-micro-sft
   - build-small-hackathon/mind-of-tashi-micro-sft-gguf
 datasets:
   - build-small-hackathon/mind-of-tashi-selfplay

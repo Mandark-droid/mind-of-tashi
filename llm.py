@@ -48,6 +48,100 @@ CONVICTION_TOPK = int(os.environ.get("CONVICTION_TOPK", "5"))
 COMPOSURE_TEMP_GAIN = float(os.environ.get("COMPOSURE_TEMP_GAIN", "0.8"))
 COMPOSURE_TEMP_MAX = float(os.environ.get("COMPOSURE_TEMP_MAX", "1.6"))
 
+# Backend selector:
+#   ""/"llamacpp"  -> llama.cpp GGUF (Off-the-Grid + Llama Champion). DEFAULT,
+#                     so a local clone runs the model on llama.cpp out of the box.
+#   "transformers" -> PyTorch + ZeroGPU: the deployed Space sets BACKEND=transformers
+#                     to run the SFT safetensors on a dynamically-allocated GPU
+#                     via @spaces.GPU (free, scales to many players). Still
+#                     Off-the-Grid (local GPU, no cloud API).
+#   "mock"         -> heuristic, no weights.
+BACKEND = os.environ.get("BACKEND", "").strip().lower()
+# The transformers backend pulls the safetensors checkpoint, NOT the GGUF.
+TF_MODEL_REPO = os.environ.get("TF_MODEL_REPO", "build-small-hackathon/mind-of-tashi-micro-sft")
+GPU_DURATION = int(os.environ.get("GPU_DURATION", "60"))
+
+
+# --- transformers / ZeroGPU backend --------------------------------------- #
+# @spaces.GPU requests a GPU for the call's duration (ZeroGPU) and is a no-op
+# off-ZeroGPU, so the same code path runs locally on a normal GPU/CPU. If the
+# `spaces` package is absent (pure llama.cpp/mock installs) fall back to a no-op.
+try:
+    import spaces as _spaces  # type: ignore
+    _GPU = _spaces.GPU
+except Exception:  # spaces not installed
+    def _GPU(*dargs, **dkw):
+        if len(dargs) == 1 and callable(dargs[0]) and not dkw:
+            return dargs[0]                        # bare @_GPU
+        def _deco(fn):
+            return fn
+        return _deco                              # @_GPU(duration=...)
+
+_TF_TOK = None
+_TF_MODEL = None
+
+
+def _load_transformers() -> None:
+    """Load the SFT safetensors to cuda at startup. ZeroGPU's CUDA-emulation
+    makes `.to('cuda')` work outside @spaces.GPU; real CUDA is used inside
+    _tf_generate. transformers is the model's *native* runtime, so the
+    mind-scrolls are faithful (the norm_topk_prob issue was llama.cpp-only)."""
+    global _TF_TOK, _TF_MODEL
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    # "cuda" on ZeroGPU (its CUDA-emulation makes this work at startup). Override
+    # TF_DEVICE=cpu for a GPU-less local clone (slow but functional).
+    device = os.environ.get("TF_DEVICE", "cuda")
+    _TF_TOK = AutoTokenizer.from_pretrained(TF_MODEL_REPO, trust_remote_code=True)
+    _TF_MODEL = AutoModelForCausalLM.from_pretrained(
+        TF_MODEL_REPO, torch_dtype=torch.bfloat16, trust_remote_code=True,
+    ).to(device).eval()
+
+
+@_GPU(duration=GPU_DURATION)
+def _tf_generate(messages: List[Dict], max_new_tokens: int,
+                 temperature: float, top_p: float) -> Dict:
+    """Generate one completion on the (ZeroGPU) GPU and return it in the OpenAI
+    chat shape — message content + per-token top-K logprobs — so the Conviction
+    Meter / parse path are reused unchanged across both backends."""
+    import torch
+    tok, model = _TF_TOK, _TF_MODEL
+    # apply_chat_template returns a BatchEncoding (dict) in transformers 5.x;
+    # splat it into generate so input_ids + attention_mask both go through.
+    enc = tok.apply_chat_template(
+        messages, add_generation_prompt=True, return_tensors="pt", return_dict=True,
+    )
+    enc = {k: v.to(model.device) for k, v in enc.items()}
+    prompt_len = enc["input_ids"].shape[1]
+    do_sample = bool(temperature and temperature > 0.0)
+    with torch.no_grad():
+        gen = model.generate(
+            **enc,
+            max_new_tokens=max_new_tokens,
+            do_sample=do_sample,
+            temperature=(temperature if do_sample else None),
+            top_p=(top_p if do_sample else None),
+            output_scores=True,
+            return_dict_in_generate=True,
+            pad_token_id=(tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id),
+        )
+    gen_ids = gen.sequences[0][prompt_len:]
+    text = tok.decode(gen_ids, skip_special_tokens=True)
+    content: List[Dict] = []
+    for i, step_logits in enumerate(gen.scores):
+        if i >= len(gen_ids):
+            break
+        lp = torch.log_softmax(step_logits[0].float(), dim=-1)
+        tid = int(gen_ids[i].item())
+        k = min(CONVICTION_TOPK, lp.shape[-1])
+        topk = torch.topk(lp, k=k)
+        top = [{"token": tok.decode([int(idx)]), "logprob": float(v)}
+               for v, idx in zip(topk.values.tolist(), topk.indices.tolist())]
+        content.append({"token": tok.decode([tid]),
+                        "logprob": float(lp[tid].item()), "top_logprobs": top})
+    return {"choices": [{"message": {"content": text},
+                         "logprobs": {"content": content}}]}
+
 
 class Reasoner:
     def __init__(self) -> None:
@@ -55,6 +149,19 @@ class Reasoner:
         self.backend = "mock"
         if FORCE_MOCK:
             return
+        backend = BACKEND or "llamacpp"   # default = llama.cpp (Llama Champion) for local clones
+        if backend == "mock":
+            return
+        if backend == "transformers":
+            try:
+                _load_transformers()
+                self.backend = "transformers"
+                print("[llm] backend: transformers (ZeroGPU-ready)")
+            except Exception as exc:
+                print(f"[llm] transformers backend failed ({exc}); falling back to mock")
+                self.backend = "mock"
+            return
+        # --- llama.cpp (default; Off-the-Grid + Llama Champion) ---
         try:
             from llama_cpp import Llama  # noqa: WPS433
             common = dict(
@@ -108,7 +215,7 @@ class Reasoner:
         # swing chance on the mock path; surfaced to the UI as `composure`.
         tilt = _composure_tilt(state)
         composure = int(round(100 * (1 - tilt)))
-        if self.llm is None:
+        if self.backend == "mock":
             parsed = _mock_choose(opp, state, legal)
             if legal and tilt > 0 and random.random() < tilt * 0.5:
                 parsed["move"] = random.choice(legal)  # composure cracks: a wild swing
@@ -153,6 +260,12 @@ class Reasoner:
             0.7 + 0.05 * (5 - opp.difficulty)  # brawlers run hotter
             + max(0.0, min(1.0, tilt)) * COMPOSURE_TEMP_GAIN,  # +heat as she frays
         )
+        # transformers/ZeroGPU path: generate on GPU, return the OpenAI shape.
+        # The Oath's hard GBNF mask is llama.cpp-only; on this backend the seal
+        # is still enforced by the legal-move filter (sealed move dropped from
+        # `legal` upstream, and parse_reply can't fall back to it).
+        if self.backend == "transformers":
+            return _tf_generate(messages, opp.think_tokens + 80, temperature, 0.9)
         base = dict(
             messages=messages,
             max_tokens=opp.think_tokens + 80,
