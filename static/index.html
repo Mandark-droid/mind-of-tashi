@@ -1206,6 +1206,7 @@
           <span class="ident-or">— or play as a guest above</span>
         </div>
         <div class="ident-status" id="identStatus"></div>
+        <a class="ident-link" id="identSignOut" href="/logout" style="display:none">sign out — play as a guest</a>
       </div>
 
       <button class="btn" id="cardBtn">Enter the mist</button>
@@ -2510,6 +2511,7 @@
       $("identName").disabled = true;
       $("identStatus").textContent = "signed in as " + identity.username;
       $("identCta").style.display = "none";
+      $("identSignOut").style.display = "";   // let a signed-in user drop back to guest
     } else {
       $("identName").value = remembered;
       $("identName").disabled = false;
@@ -2520,6 +2522,7 @@
         $("identCta").style.display = "none";
       }
       $("identStatus").textContent = "";
+      $("identSignOut").style.display = "none";
     }
   }
 
