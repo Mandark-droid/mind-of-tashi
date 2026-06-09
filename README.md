@@ -9,6 +9,19 @@ app_file: app.py
 pinned: true
 license: mit
 hf_oauth: true
+tags:
+  - build-small-hackathon
+  - thousand-token-wood
+  - off-the-grid
+  - llama-champion
+  - off-brand
+  - well-tuned
+  - sharing-is-caring
+  - field-notes
+  - zerogpu
+  - modal
+  - reasoning-game
+  - bilingual
 models:
   - build-small-hackathon/mind-of-tashi-micro-sft
   - build-small-hackathon/mind-of-tashi-micro-sft-gguf
