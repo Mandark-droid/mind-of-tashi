@@ -955,6 +955,7 @@
            modal — see #helpModal below + setupHelpModal() in the JS. -->
       <button class="lb-link" id="openHelp" title="Moves and rules">? Rules</button>
       <button class="lb-link" id="openLb" title="Show the climbers' board">▲ Leaderboard</button>
+      <button class="lb-link" id="musicToggle" title="Toggle background music">🔇 Music</button>
       <a class="lb-link" id="topSignOut" href="/logout" title="Sign out — play as a guest" style="display:none">⎋ Sign out</a>
     </div>
   </header>
@@ -1239,6 +1240,9 @@
   <!-- Game meta — replaced at request time by app.index() with the real
        backend's _meta() JSON (moves, ladder, HP/prana constants, backend
        label). Keeps the UI a pure consumer of engine state. -->
+  <!-- Per-level background music (opt-in). src is set by setLevelMusic(arenaId). -->
+  <audio id="bgm" loop preload="none"></audio>
+
   <script id="game-meta" type="application/json">__GAME_META__</script>
 
 <script>
@@ -1325,6 +1329,38 @@
     "the-mountain":   { video:"assets/summit.mp4",    poster:"assets/summit.webp",    name:"Summit" },
     "the-veiled-one": { video:"assets/veil.mp4",      poster:"assets/veil.webp",      name:"Beyond the Veil" },
   };
+
+  // ---- per-level background music (opt-in; one mood-matched track per arena,
+  // derived from the arena's poster name: village.webp -> village.wav) --------
+  const MUSIC_VOL = 0.32;
+  let musicOn = localStorage.getItem("mist:bgm") === "1";
+  function arenaMusicUrl(arenaId){
+    const a = ARENAS[arenaId];
+    return a && a.poster ? "/" + a.poster.replace(/\.webp$/, ".wav") : null;
+  }
+  function setLevelMusic(arenaId){
+    const bgm = document.getElementById("bgm");
+    const url = arenaMusicUrl(arenaId);
+    if (!bgm || !url) return;
+    if (bgm.getAttribute("src") !== url){ bgm.setAttribute("src", url); bgm.load(); }
+    if (musicOn){ bgm.volume = MUSIC_VOL; bgm.play().catch(() => {}); }
+  }
+  function updateMusicBtn(){
+    const b = document.getElementById("musicToggle");
+    if (b) b.textContent = musicOn ? "🔊 Music" : "🔇 Music";
+  }
+  function toggleMusic(){
+    musicOn = !musicOn;
+    localStorage.setItem("mist:bgm", musicOn ? "1" : "0");
+    updateMusicBtn();
+    const bgm = document.getElementById("bgm");
+    if (!bgm) return;
+    if (musicOn){
+      if (!bgm.getAttribute("src")) setLevelMusic(currentArenaId);
+      bgm.volume = MUSIC_VOL; bgm.play().catch(() => {});
+    } else { bgm.pause(); }
+  }
+
   let activeBg = "A";              // which of (A,B) is currently visible
   let currentArenaId = "tashi";    // already-loaded into A at boot
 
@@ -1349,6 +1385,7 @@
     setTimeout(() => { if (!inEl.classList.contains("is-active")) swap(); }, 1200);
     activeBg = (activeBg === "A" ? "B" : "A");
     currentArenaId = arenaId;
+    setLevelMusic(arenaId);          // swap to this arena's track (if music on)
   }
 
   /* ============================================================
@@ -1583,6 +1620,7 @@
     // Crossfade to this opponent's arena — but only if the user hasn't
     // pinned a specific arena via the Tweaks panel.
     if (!TWEAKS.arena) crossfadeTo(opp.id);
+    setLevelMusic(TWEAKS.arena || opp.id);   // first level / pinned-arena case
     document.documentElement.style.setProperty("--accent", opp.accent);
     oppPalette = paletteFor(opp);
     state = { opponent_id:opp.id, round:1, player_hp:META.max_hp, ai_hp:META.max_hp,
@@ -2677,6 +2715,8 @@
     });
   }
   setupHelpModal();
+  $("musicToggle").addEventListener("click", toggleMusic);
+  updateMusicBtn();
   $("lbClose").onclick = () => $("lbOv").classList.add("hide");
   $("lbOv").addEventListener("click", e => { if (e.target === $("lbOv")) $("lbOv").classList.add("hide"); });
   loadIdentity();
