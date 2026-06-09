@@ -177,6 +177,12 @@
   .topbar .backend{font-size:10px; color:var(--bone-dim); letter-spacing:.1em; text-transform:uppercase; opacity:.7}
   .topbar .brand-logo{height:36px; width:36px; border-radius:50%; object-fit:cover;
     box-shadow:0 0 14px rgba(108,182,255,.3); flex:0 0 auto}
+  /* Brand medallion reused on the start/login card, the Rules modal and the
+     leaderboard so the logo shows wherever the player pauses. */
+  .mlogo{display:block; width:58px; height:58px; border-radius:50%; object-fit:cover;
+    margin:0 auto 10px; box-shadow:0 0 18px rgba(108,182,255,.3);
+    border:2px solid rgba(232,161,58,.55)}
+  .help-head .mlogo{margin:0; width:34px; height:34px}
   /* Between-rounds interlude: brief full-screen splash on level advance. */
   #interlude{position:fixed; inset:0; z-index:60; display:flex; flex-direction:column;
     align-items:center; justify-content:center; background:rgba(8,11,16,.93);
@@ -965,6 +971,7 @@
   <div class="ov hide" id="helpModal">
     <div class="card help-card">
       <div class="help-head">
+        <img class="mlogo" src="/assets/logo.png" alt="" />
         <span class="deva">॥ धुंध ॥</span>
         <h2>The Rules of the Mist</h2>
         <button class="help-close" id="closeHelp" aria-label="Close">×</button>
@@ -1182,6 +1189,7 @@
 
   <div class="ov" id="overlay">
     <div class="card" id="card">
+      <img class="mlogo" src="/assets/logo.png" alt="The Mind of Tashi" />
       <div class="em" id="cardEm">⛰</div>
       <h2 id="cardTitle">The Mind of Tashi</h2>
       <div class="sub" id="cardSub">a duel of foresight in the Village Hidden in the Mist</div>
@@ -1217,7 +1225,7 @@
   <!-- Leaderboard modal -->
   <div class="ov hide" id="lbOv">
     <div class="card lb-card">
-      <div class="em">▲</div>
+      <img class="mlogo" src="/assets/logo.png" alt="" />
       <h2>Climbers of the Mist</h2>
       <div class="sub" id="lbSub">fastest summit clears — by total turns, then time</div>
       <div class="lb-status" id="lbStatus"></div>
@@ -2066,8 +2074,13 @@
     const opp = personaVisuals(r.opponentId);
 
     // ---- 1. ARENA BACKDROP (persona's .webp poster, blurred + darkened)
-    const arenaKey = (typeof ARENAS === "object" && ARENAS && ARENAS[r.opponentId]) || "village";
-    const bg = await loadImg(`/assets/${arenaKey}.webp`);
+    // ARENAS[id] is an object {video, poster, name} — use its poster for the
+    // backdrop and its name for the footer (NOT the object itself, which
+    // stringifies to "[object Object]").
+    const arena = (typeof ARENAS === "object" && ARENAS && ARENAS[r.opponentId]) || null;
+    const arenaName = (arena && arena.name) || "the Village Hidden in the Mist";
+    const posterUrl = arena && arena.poster ? `/${String(arena.poster).replace(/^\/+/, "")}` : "/assets/village.webp";
+    const bg = await loadImg(posterUrl);
     if (bg) {
       // cover-fit + slight zoom for cinematic crop
       ctx.save();
@@ -2252,7 +2265,7 @@
     ctx.textAlign = "center";
     ctx.font = "400 22px 'VT323', monospace";
     ctx.fillStyle = "rgba(154, 166, 176, 0.85)";
-    const stats = `round ${r.rounds || "?"}  ·  ${r.turnsTotal || runTurns || 0} total turns  ·  ${arenaKey}`;
+    const stats = `round ${r.rounds || "?"}  ·  ${r.turnsTotal || runTurns || 0} total turns  ·  ${arenaName}`;
     ctx.fillText(stats, W/2, my + mh - 56);
     ctx.font = "400 18px 'VT323', monospace";
     ctx.fillStyle = "rgba(154, 166, 176, 0.55)";
@@ -2400,7 +2413,7 @@
     setTimeout(() => {
       el.classList.remove("show");
       setTimeout(() => { el.classList.add("hide"); if (done) done(); }, 450);
-    }, 2000);
+    }, 15000);
   }
 
   function endRound(data){
