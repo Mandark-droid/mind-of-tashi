@@ -955,6 +955,7 @@
            modal — see #helpModal below + setupHelpModal() in the JS. -->
       <button class="lb-link" id="openHelp" title="Moves and rules">? Rules</button>
       <button class="lb-link" id="openLb" title="Show the climbers' board">▲ Leaderboard</button>
+      <a class="lb-link" id="topSignOut" href="/logout" title="Sign out — play as a guest" style="display:none">⎋ Sign out</a>
     </div>
   </header>
 
@@ -2512,6 +2513,7 @@
       $("identStatus").textContent = "signed in as " + identity.username;
       $("identCta").style.display = "none";
       $("identSignOut").style.display = "";   // let a signed-in user drop back to guest
+      $("topSignOut").style.display = "";     // always-visible topbar sign-out
     } else {
       $("identName").value = remembered;
       $("identName").disabled = false;
@@ -2523,6 +2525,7 @@
       }
       $("identStatus").textContent = "";
       $("identSignOut").style.display = "none";
+      $("topSignOut").style.display = "none";
     }
   }
 
