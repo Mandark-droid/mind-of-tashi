@@ -1330,10 +1330,12 @@
     "the-veiled-one": { video:"assets/veil.mp4",      poster:"assets/veil.webp",      name:"Beyond the Veil" },
   };
 
-  // ---- per-level background music (opt-in; one mood-matched track per arena,
-  // derived from the arena's poster name: village.webp -> village.wav) --------
+  // ---- per-level background music (ON by default; one mood-matched track per
+  // arena, derived from the arena's poster name: village.webp -> village.wav).
+  // Browsers block autoplay-with-sound, so it actually starts on the first user
+  // gesture (the "Enter the mist" click -> newFight -> setLevelMusic). --------
   const MUSIC_VOL = 0.32;
-  let musicOn = localStorage.getItem("mist:bgm") === "1";
+  let musicOn = localStorage.getItem("mist:bgm") !== "0";   // default on; "0" = user muted
   function arenaMusicUrl(arenaId){
     const a = ARENAS[arenaId];
     return a && a.poster ? "/" + a.poster.replace(/\.webp$/, ".wav") : null;
