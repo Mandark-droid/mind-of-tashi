@@ -99,17 +99,52 @@ The web layer is model-agnostic. Configure via Space **Variables** / env:
 | `LEADERBOARD_REPO` | unset | `build-small-hackathon/mind-of-tashi-runs` to enable the board |
 | `HF_TOKEN` | unset | write-scoped, in Space **Secrets**, for leaderboard writes |
 
-**Note on hardware:** llama.cpp + **ZeroGPU** is unreliable. Run llama.cpp
-**CPU-only** on a CPU-upgrade Space, or use a **dedicated GPU** Space (not
-ZeroGPU). Turn-based play makes a few seconds of "reading you…" feel like
-drama, not lag.
+**Two runtimes, one model.** The deployed Space runs the student through
+**transformers on Hugging Face ZeroGPU** — a GPU is allocated on demand per move
+(`@spaces.GPU`), so it's fast and scales to many concurrent players, and it's
+still *off the grid* (local GPU, no cloud API). For a self-hosted **llama.cpp**
+runtime, clone the repo and `docker build` (or `pip install llama-cpp-python`
+and set `BACKEND=llamacpp`) — the same GGUF student then runs on CPU, no GPU
+needed. `BACKEND=transformers` selects the ZeroGPU path.
 
 ## Bonus badges targeted
 
-- **Off the Grid** — model runs in-Space via llama.cpp, no cloud API.
-- **Llama Champion** — opponent runs through the llama.cpp runtime.
+- **Off the Grid** — the opponent runs locally (ZeroGPU transformers in-Space, or
+  llama.cpp on a clone); no cloud API at request time.
+- **Llama Champion** — the GGUF student runs through the llama.cpp runtime (the
+  Docker / local path).
 - **Off-Brand** — fully custom frontend on `gradio.Server` (Gradio 6).
-- **Well-Tuned** — a fine-tuned custom-MoE GGUF dropped in via `MODEL_REPO`.
+- **Well-Tuned** — a fine-tuned custom-MoE student (SFT + GRPO), shipped as both
+  safetensors and GGUF.
+- **Sharing is Caring** — everything is published openly on the Hub: the
+  [self-play dataset](https://huggingface.co/datasets/build-small-hackathon/mind-of-tashi-selfplay),
+  the [leaderboard runs](https://huggingface.co/datasets/build-small-hackathon/mind-of-tashi-runs),
+  the SFT + GRPO models + GGUFs, and the OpenEnv gym — all cross-linked in one
+  [collection](https://huggingface.co/collections/build-small-hackathon/the-mind-of-tashi-6a27107214f1265b159ade35).
+- **Field Notes** — a written build log: the bilingual `<think>` distillation,
+  the qwen3moe `norm_topk_prob` GGUF bug, the David-vs-Goliath GRPO framing, and
+  the ZeroGPU port.
+
+## Built with — thank you 🙏
+
+A **Build Small Hackathon (Track Two)** submission, made possible by:
+
+- **[Hugging Face](https://huggingface.co/)** — the backbone. The Hub hosts the
+  [dataset](https://huggingface.co/datasets/build-small-hackathon/mind-of-tashi-selfplay),
+  the [SFT](https://huggingface.co/build-small-hackathon/mind-of-tashi-micro-sft) +
+  [GRPO](https://huggingface.co/build-small-hackathon/mind-of-tashi-micro-grpo)
+  models, the GGUFs, the [OpenEnv gym](https://huggingface.co/spaces/build-small-hackathon/mind-of-tashi-env),
+  and this Space. **ZeroGPU** gives the deployed opponent a free,
+  dynamically-allocated GPU; **Gradio** powers the custom frontend; and HF
+  **OAuth** drives the verified leaderboard. 🤗
+- **[Modal](https://modal.com/)** — serverless GPU compute for training: the SFT
+  and GRPO runs of the ~200M-active student executed on **Modal L4**.
+- **[llama.cpp](https://github.com/ggml-org/llama.cpp)** — the local inference
+  runtime (the *Llama Champion* path): clone + `docker build` and the same GGUF
+  student runs entirely on CPU, no cloud.
+- **[NVIDIA](https://www.nvidia.com/)** — the silicon under all of it: ZeroGPU's
+  RTX Pro 6000 Blackwell at runtime, L4 for training on Modal, and a local
+  RTX 3060 for the dev loop.
 
 ## Layout
 
