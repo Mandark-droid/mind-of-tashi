@@ -32,7 +32,7 @@ models:
   - build-small-hackathon/mind-of-tashi-micro-grpo
   - build-small-hackathon/mind-of-tashi-micro-grpo-gguf
   - openbmb/MiniCPM5-1B-GGUF
-  - unsloth/NVIDIA-Nemotron-3-Nano-4B-GGUF
+  - nvidia/Nemotron-Mini-4B-Instruct
 datasets:
   - build-small-hackathon/mind-of-tashi-selfplay
 ---
@@ -151,7 +151,7 @@ way:
 | **Tashi micro GRPO** (0.4B MoE, ours) | the RL-trained student — our best read |
 | **Tashi micro SFT** (0.4B MoE, ours) | the pre-GRPO checkpoint, for A/B-ing the training story |
 | **MiniCPM5 1B** (OpenBMB) | sponsor-class small — can it out-read a model half its size? |
-| **Nemotron 3 Nano 4B** (NVIDIA) | the big sibling — 10× the active params, same blind commit |
+| **Nemotron Mini 4B** (NVIDIA) | the big sibling — 20× the active params, same blind commit |
 
 The defender is always the **house mind** — the Space's own deployed opponent
 (ZeroGPU transformers), with the Conviction Meter, composure cracking, and

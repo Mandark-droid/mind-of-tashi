@@ -91,10 +91,14 @@ CHALLENGERS: Dict[str, Dict[str, str]] = {
         "spec": "llamacpp:openbmb/MiniCPM5-1B-GGUF:MiniCPM5-1B-Q4_K_M.gguf",
         "tf_spec": "transformers:openbmb/MiniCPM5-1B",
     },
+    # Nemotron MINI (pure transformer), not Nemotron-3-Nano: the Nano is a
+    # Mamba hybrid whose transformers load hard-requires mamba-ssm (CUDA
+    # compile, no-go on the Space image). Mini-4B runs on stock transformers
+    # — proven on ZeroGPU elsewhere in this hackathon.
     "nemotron-4b": {
-        "label": "Nemotron 3 Nano 4B (NVIDIA)",
-        "spec": "llamacpp:unsloth/NVIDIA-Nemotron-3-Nano-4B-GGUF:NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf",
-        "tf_spec": "transformers:unsloth/NVIDIA-Nemotron-3-Nano-4B",
+        "label": "Nemotron Mini 4B (NVIDIA)",
+        "spec": "llamacpp:bartowski/Nemotron-Mini-4B-Instruct-GGUF:Nemotron-Mini-4B-Instruct-Q4_K_M.gguf",
+        "tf_spec": "transformers:nvidia/Nemotron-Mini-4B-Instruct",
     },
 }
 _DEFAULT_CHALLENGER = next(iter(CHALLENGERS))
