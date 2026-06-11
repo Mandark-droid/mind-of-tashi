@@ -95,10 +95,14 @@ app.mount("/assets", StaticFiles(directory=ASSETS), name="assets")
 reasoner = Reasoner()  # loaded once; reused across turns
 print(f"[app] opponent backend: {reasoner.backend}")
 
-# Warm the default self-play challenger's GGUF in the background at boot so
-# the first "Watch" click doesn't stall on a multi-hundred-MB download.
+# Warm the WHOLE self-play roster in the background at boot — download AND
+# load every challenger (builds serialize on selfplay_live._build_lock, so
+# this is one model at a time on a daemon thread; boot itself isn't blocked).
+# By the time a watcher picks any challenger, its weights are resident and
+# round 1 starts at generation speed.
 if selfplay_live.SELFPLAY_MODE:
-    print(f"[app] selfplay prewarm: {selfplay_live.prewarm()}")
+    for _name in selfplay_live.CHALLENGERS:
+        print(f"[app] selfplay prewarm: {selfplay_live.prewarm(_name)}")
 
 
 # --- metadata injected into the page so the UI renders from one source ----
