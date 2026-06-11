@@ -21,6 +21,7 @@ Spec strings (the `--a-teacher` / `--b-teacher` CLI args):
     llamacpp                                 — local llama.cpp via env vars
     llamacpp:<hub-repo>:<gguf-file>          — local llama.cpp, explicit GGUF
                                                e.g. llamacpp:openbmb/MiniCPM5-1B-GGUF:MiniCPM5-1B-Q4_K_M.gguf
+    transformers:<hub-repo>                  — local transformers/(Zero)GPU safetensors
     ollama:<model>                           — local Ollama, e.g. ollama:qwen3:14b
     gemini:<model>                           — Google Gemini, e.g. gemini:gemini-2.0-flash-exp
     openrouter:<author>/<model>[:<variant>]  — e.g. openrouter:meta-llama/llama-3.3-70b-instruct:free
@@ -59,6 +60,12 @@ def make_teacher(spec: str) -> Teacher:
                 "llamacpp:<hub-repo>:<gguf-file>"
             )
         return LlamaCppTeacher(repo=repo, filename=fname)
+
+    if head == "transformers":
+        if not tail:
+            raise ValueError("transformers spec needs a model repo: transformers:<hub-repo>")
+        from .llamacpp import TransformersTeacher
+        return TransformersTeacher(repo=tail)
 
     if head == "ollama":
         if not tail:

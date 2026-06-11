@@ -156,7 +156,9 @@ The defender is always the **house mind** — the Space's own deployed opponent
 grammar-locked Oath all live. Watch-mode matches never touch the leaderboard
 or the live-traces dataset, and human games are completely unaffected by the
 flag. On a Space, cloud/API teacher specs are refused outright — self-play is
-Off-the-Grid by construction.
+Off-the-Grid by construction. If llama.cpp isn't available in the runtime,
+challengers fall back automatically to the same checkpoints as safetensors on
+the **transformers/(Zero)GPU** path — local either way.
 
 ## Bonus badges targeted
 

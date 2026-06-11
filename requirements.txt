@@ -17,4 +17,9 @@ huggingface_hub>=0.27.0
 # challenger GGUFs (our SFT/GRPO micro, MiniCPM5-1B, Nemotron-4B) run
 # in-process on CPU — separate from the house opponent's transformers/ZeroGPU
 # backend, and still Off-the-Grid (local inference, no cloud API).
-llama-cpp-python>=0.3.0
+# PREBUILT CPU WHEEL ONLY: compiling from the PyPI sdist OOM-kills the Space
+# build container (exit 137). The abetlen index ships manylinux cp38-cp313
+# wheels for ==0.3.19; if install fails anyway, the challenger roster falls
+# back to the transformers/(Zero)GPU path automatically (selfplay_live).
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+llama-cpp-python==0.3.19

@@ -77,35 +77,40 @@ except Exception:  # spaces not installed
             return fn
         return _deco                              # @_GPU(duration=...)
 
-_TF_TOK = None
-_TF_MODEL = None
+# repo -> (tokenizer, model). The house opponent loads TF_MODEL_REPO; the
+# self-play challenger roster can load additional repos on the same path.
+_TF_CACHE: Dict[str, tuple] = {}
 
 
-def _load_transformers() -> None:
-    """Load the SFT safetensors to cuda at startup. ZeroGPU's CUDA-emulation
+def _load_transformers(repo: Optional[str] = None) -> None:
+    """Load a safetensors checkpoint to cuda. ZeroGPU's CUDA-emulation
     makes `.to('cuda')` work outside @spaces.GPU; real CUDA is used inside
     _tf_generate. transformers is the model's *native* runtime, so the
     mind-scrolls are faithful (the norm_topk_prob issue was llama.cpp-only)."""
-    global _TF_TOK, _TF_MODEL
+    repo = repo or TF_MODEL_REPO
+    if repo in _TF_CACHE:
+        return
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
     # "cuda" on ZeroGPU (its CUDA-emulation makes this work at startup). Override
     # TF_DEVICE=cpu for a GPU-less local clone (slow but functional).
     device = os.environ.get("TF_DEVICE", "cuda")
-    _TF_TOK = AutoTokenizer.from_pretrained(TF_MODEL_REPO, trust_remote_code=True)
-    _TF_MODEL = AutoModelForCausalLM.from_pretrained(
-        TF_MODEL_REPO, torch_dtype=torch.bfloat16, trust_remote_code=True,
+    tok = AutoTokenizer.from_pretrained(repo, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(
+        repo, torch_dtype=torch.bfloat16, trust_remote_code=True,
     ).to(device).eval()
+    _TF_CACHE[repo] = (tok, model)
 
 
 @_GPU(duration=GPU_DURATION)
 def _tf_generate(messages: List[Dict], max_new_tokens: int,
-                 temperature: float, top_p: float) -> Dict:
+                 temperature: float, top_p: float,
+                 repo: Optional[str] = None) -> Dict:
     """Generate one completion on the (ZeroGPU) GPU and return it in the OpenAI
     chat shape — message content + per-token top-K logprobs — so the Conviction
     Meter / parse path are reused unchanged across both backends."""
     import torch
-    tok, model = _TF_TOK, _TF_MODEL
+    tok, model = _TF_CACHE[repo or TF_MODEL_REPO]
     # apply_chat_template returns a BatchEncoding (dict) in transformers 5.x;
     # splat it into generate so input_ids + attention_mask both go through.
     enc = tok.apply_chat_template(
@@ -145,13 +150,15 @@ def _tf_generate(messages: List[Dict], max_new_tokens: int,
 
 class Reasoner:
     def __init__(self, repo: Optional[str] = None, filename: Optional[str] = None,
-                 backend: Optional[str] = None) -> None:
-        """repo/filename override MODEL_REPO/MODEL_FILE (llama.cpp path only);
-        backend overrides the BACKEND env. Both exist for the self-play
-        challenger roster, which loads a *different* GGUF per challenger while
-        the Space's house opponent keeps its own backend untouched."""
+                 backend: Optional[str] = None, tf_repo: Optional[str] = None) -> None:
+        """repo/filename override MODEL_REPO/MODEL_FILE (llama.cpp path);
+        tf_repo overrides TF_MODEL_REPO (transformers path); backend overrides
+        the BACKEND env. All exist for the self-play challenger roster, which
+        loads a *different* model per challenger while the Space's house
+        opponent keeps its own backend untouched."""
         self.llm = None
         self.backend = "mock"
+        self._tf_repo = tf_repo or TF_MODEL_REPO
         if FORCE_MOCK:
             return
         backend = (backend or BACKEND or "llamacpp")  # default = llama.cpp (Llama Champion) for local clones
@@ -159,9 +166,9 @@ class Reasoner:
             return
         if backend == "transformers":
             try:
-                _load_transformers()
+                _load_transformers(self._tf_repo)
                 self.backend = "transformers"
-                print("[llm] backend: transformers (ZeroGPU-ready)")
+                print(f"[llm] backend: transformers (ZeroGPU-ready) [{self._tf_repo}]")
             except Exception as exc:
                 print(f"[llm] transformers backend failed ({exc}); falling back to mock")
                 self.backend = "mock"
@@ -270,7 +277,8 @@ class Reasoner:
         # is still enforced by the legal-move filter (sealed move dropped from
         # `legal` upstream, and parse_reply can't fall back to it).
         if self.backend == "transformers":
-            return _tf_generate(messages, opp.think_tokens + 80, temperature, 0.9)
+            return _tf_generate(messages, opp.think_tokens + 80, temperature, 0.9,
+                                repo=self._tf_repo)
         base = dict(
             messages=messages,
             max_tokens=opp.think_tokens + 80,

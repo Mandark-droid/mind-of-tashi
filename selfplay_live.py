@@ -53,7 +53,7 @@ ON_SPACE = bool(os.environ.get("SPACE_ID"))
 if SELFPLAY_MODE and not ON_SPACE:
     init_otel(service_name="mind-of-tashi-selfplay-live")
 
-_LOCAL_HEADS = ("mock", "llamacpp", "house")
+_LOCAL_HEADS = ("mock", "llamacpp", "transformers", "house")
 
 
 def _space_safe(spec: str, fallback: str = "llamacpp") -> str:
@@ -68,24 +68,31 @@ def _space_safe(spec: str, fallback: str = "llamacpp") -> str:
     return fallback
 
 
-# The watcher-facing challenger roster: who plays the PLAYER side. All are
-# llama.cpp GGUFs (local inference only). Order = UI order; first is default.
+# The watcher-facing challenger roster: who plays the PLAYER side. Primary
+# spec is a llama.cpp GGUF on CPU; tf_spec is the transformers/(Zero)GPU
+# fallback used automatically when llama.cpp isn't importable in the runtime
+# (e.g. the wheel failed to install on a Space). Both are local inference —
+# Off-the-Grid either way. Order = UI order; first is default.
 CHALLENGERS: Dict[str, Dict[str, str]] = {
     "tashi-grpo": {
         "label": "Tashi micro GRPO · 0.4B MoE (ours)",
         "spec": "llamacpp:build-small-hackathon/mind-of-tashi-micro-grpo-gguf:mind-of-tashi-micro-grpo-Q4_K_M.gguf",
+        "tf_spec": "transformers:build-small-hackathon/mind-of-tashi-micro-grpo",
     },
     "tashi-sft": {
         "label": "Tashi micro SFT · 0.4B MoE (ours)",
         "spec": "llamacpp:build-small-hackathon/mind-of-tashi-micro-sft-gguf:mind-of-tashi-micro-sft-Q4_K_M.gguf",
+        "tf_spec": "transformers:build-small-hackathon/mind-of-tashi-micro-sft",
     },
     "minicpm5-1b": {
         "label": "MiniCPM5 1B (OpenBMB)",
         "spec": "llamacpp:openbmb/MiniCPM5-1B-GGUF:MiniCPM5-1B-Q4_K_M.gguf",
+        "tf_spec": "transformers:openbmb/MiniCPM5-1B",
     },
     "nemotron-4b": {
         "label": "Nemotron 3 Nano 4B (NVIDIA)",
         "spec": "llamacpp:unsloth/NVIDIA-Nemotron-3-Nano-4B-GGUF:NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf",
+        "tf_spec": "transformers:unsloth/NVIDIA-Nemotron-3-Nano-4B",
     },
 }
 _DEFAULT_CHALLENGER = next(iter(CHALLENGERS))
@@ -148,14 +155,29 @@ def _ensure_teachers():
 
 def _challenger_teacher(challenger: Optional[str]):
     """Teacher for a roster pick; None -> fall through to PLAYER_TEACHER_SPEC.
-    Built once per challenger and cached — each is its own llama.cpp context,
-    so switching challengers mid-session never reloads an earlier pick."""
+    Built once per challenger and cached — each is its own model context, so
+    switching challengers mid-session never reloads an earlier pick.
+
+    If the GGUF/llama.cpp build silently degraded to mock (wheel missing,
+    fetch failed) and the entry has a tf_spec, retry on the transformers/
+    (Zero)GPU path so the picker stays honest."""
     if not challenger or challenger not in CHALLENGERS:
         return None
     t = _challenger_teachers.get(challenger)
     if t is None:
         from teachers import make_teacher  # lazy
-        t = make_teacher(_space_safe(CHALLENGERS[challenger]["spec"]))
+        entry = CHALLENGERS[challenger]
+        t = make_teacher(_space_safe(entry["spec"]))
+        tf_spec = entry.get("tf_spec")
+        degraded = (getattr(getattr(t, "_reasoner", None), "backend", None)
+                    == "mock")
+        if degraded and tf_spec and os.environ.get("FORCE_MOCK", "0") != "1":
+            print(f"[selfplay] challenger {challenger}: llama.cpp unavailable "
+                  f"-> transformers fallback ({tf_spec})")
+            try:
+                t = make_teacher(_space_safe(tf_spec))
+            except Exception as exc:
+                print(f"[selfplay] transformers fallback failed too: {exc}")
         _challenger_teachers[challenger] = t
     return t
 

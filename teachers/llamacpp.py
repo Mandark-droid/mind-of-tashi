@@ -37,8 +37,24 @@ class LlamaCppTeacher(Teacher):
             parsed=parsed,
             raw=raw,
             meta={
-                "backend": "llamacpp",
+                "backend": self.name,
                 "model": self._model,
                 "reasoner_backend": self._reasoner.backend,
             },
         )
+
+
+class TransformersTeacher(LlamaCppTeacher):
+    """Same wrapper, transformers backend — safetensors on (Zero)GPU.
+
+    The self-play challenger fallback when llama.cpp isn't available in the
+    runtime (e.g. the wheel failed to install on a Space). Each repo gets its
+    own entry in llm._TF_CACHE, so challengers never clobber the house model.
+    """
+
+    name = "transformers"
+
+    def __init__(self, repo: str) -> None:
+        from llm import Reasoner
+        self._reasoner = Reasoner(backend="transformers", tf_repo=repo)
+        self._model = repo
