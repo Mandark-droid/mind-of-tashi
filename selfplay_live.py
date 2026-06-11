@@ -36,6 +36,7 @@ self-play; this module is purely for visual demo.
 """
 
 from __future__ import annotations
+import asyncio
 import os
 import threading
 from typing import Any, Dict, Optional
@@ -123,7 +124,8 @@ PLAYER_PERSONA = os.environ.get("SELFPLAY_PLAYER_PERSONA", "mirror")
 _player_teacher = None
 _opponent_teacher = None
 _challenger_teachers: Dict[str, Any] = {}
-_prewarmed: set = set()
+_prewarming: set = set()
+_build_lock = threading.Lock()
 _llamacpp_ok: Optional[bool] = None
 
 
@@ -142,47 +144,32 @@ def _llamacpp_available() -> bool:
 
 
 def prewarm(challenger: Optional[str] = None) -> str:
-    """Fire-and-forget weight download for a roster pick (default if None).
+    """Fire-and-forget FULL warm-up (download + load) of a roster pick.
 
-    The first watch-mode round otherwise stalls for the whole multi-hundred-MB
-    fetch; warming on app boot + on picker change means the weights are
-    already in the HF cache by the time the watcher clicks. Downloads the
-    artifact the teacher will actually use: the GGUF when llama.cpp works in
-    this runtime, the tf_spec safetensors snapshot otherwise."""
+    Builds the challenger's teacher on a daemon thread, so by the time the
+    watcher clicks "Watch" the model is already resident. Without this the
+    first round pays the whole multi-GB fetch + load. Construction is
+    serialized by _build_lock, so a concurrent first round can't double-load."""
     if not SELFPLAY_MODE:
         return "selfplay off"
     name = challenger if challenger in CHALLENGERS else _DEFAULT_CHALLENGER
-    entry = CHALLENGERS[name]
-    spec = _space_safe(entry["spec"])
-    head, _, tail = spec.partition(":")
-    repo, _, fname = tail.partition(":")
-    if head == "llamacpp" and repo and fname and not _llamacpp_available():
-        tf_spec = entry.get("tf_spec", "")
-        if tf_spec.startswith("transformers:"):
-            repo, fname = tf_spec.partition(":")[2], None  # snapshot, not one file
-        else:
-            return "nothing to prewarm (llama.cpp unavailable, no tf_spec)"
-    elif head != "llamacpp" or not repo or not fname:
-        return "nothing to prewarm"
-    key = f"{repo}/{fname or '*'}"
-    if key in _prewarmed:
-        return f"already warm: {key}"
+    if name in _challenger_teachers:
+        return f"already warm: {name}"
+    if name in _prewarming:
+        return f"warming: {name}"
+    _prewarming.add(name)
 
-    def _dl():
+    def _build():
         try:
-            from huggingface_hub import hf_hub_download, snapshot_download  # lazy
-            if fname:
-                hf_hub_download(repo_id=repo, filename=fname)
-            else:
-                snapshot_download(repo_id=repo)
-            print(f"[selfplay] prewarmed {key}")
+            _challenger_teacher(name)
+            print(f"[selfplay] prewarmed challenger {name}")
         except Exception as exc:
-            _prewarmed.discard(key)  # let a later request retry
-            print(f"[selfplay] prewarm failed for {key}: {exc}")
+            print(f"[selfplay] prewarm failed for {name}: {exc}")
+        finally:
+            _prewarming.discard(name)
 
-    _prewarmed.add(key)
-    threading.Thread(target=_dl, daemon=True).start()
-    return f"warming: {key}"
+    threading.Thread(target=_build, daemon=True).start()
+    return f"warming: {name}"
 
 
 def status() -> Dict[str, Any]:
@@ -219,20 +206,38 @@ def _challenger_teacher(challenger: Optional[str]):
     Built once per challenger and cached — each is its own model context, so
     switching challengers mid-session never reloads an earlier pick.
 
-    If the GGUF/llama.cpp build silently degraded to mock (wheel missing,
-    fetch failed) and the entry has a tf_spec, retry on the transformers/
-    (Zero)GPU path so the picker stays honest."""
+    BLOCKING (downloads + loads weights on first build) — call it off the
+    event loop (player_choose uses asyncio.to_thread; prewarm uses a daemon
+    thread). _build_lock keeps a prewarm and a first round from double-
+    loading the same model.
+
+    If llama.cpp is unavailable in this runtime (or the GGUF build silently
+    degraded to mock) and the entry has a tf_spec, the same checkpoint loads
+    on the transformers/(Zero)GPU path so the picker stays honest."""
     if not challenger or challenger not in CHALLENGERS:
         return None
     t = _challenger_teachers.get(challenger)
-    if t is None:
+    if t is not None:
+        return t
+    with _build_lock:
+        t = _challenger_teachers.get(challenger)  # re-check under the lock
+        if t is not None:
+            return t
         from teachers import make_teacher  # lazy
         entry = CHALLENGERS[challenger]
-        t = make_teacher(_space_safe(entry["spec"]))
+        spec = _space_safe(entry["spec"])
         tf_spec = entry.get("tf_spec")
+        mock_forced = os.environ.get("FORCE_MOCK", "0") == "1"
+        # Known-dead llama.cpp (e.g. musl wheel on glibc image): skip the
+        # doomed GGUF attempt entirely instead of paying for it per build.
+        if (spec.partition(":")[0] == "llamacpp" and tf_spec
+                and not mock_forced and not _llamacpp_available()):
+            spec = _space_safe(tf_spec)
+            tf_spec = None
+        t = make_teacher(spec)
         degraded = (getattr(getattr(t, "_reasoner", None), "backend", None)
                     == "mock")
-        if degraded and tf_spec and os.environ.get("FORCE_MOCK", "0") != "1":
+        if degraded and tf_spec and not mock_forced:
             print(f"[selfplay] challenger {challenger}: llama.cpp unavailable "
                   f"-> transformers fallback ({tf_spec})")
             try:
@@ -240,7 +245,7 @@ def _challenger_teacher(challenger: Optional[str]):
             except Exception as exc:
                 print(f"[selfplay] transformers fallback failed too: {exc}")
         _challenger_teachers[challenger] = t
-    return t
+        return t
 
 
 def _player_opponent(opp: Opponent) -> Opponent:
@@ -279,12 +284,16 @@ async def player_choose(state: Dict[str, Any], opp: Opponent,
     """Ask the player teacher for a blind-commit move on its turn.
     `challenger` is a CHALLENGERS roster id (from the UI picker); unset or
     unknown falls back to PLAYER_TEACHER_SPEC. Returns a teachers.ChoiceResult
-    so the caller has parsed + raw + meta."""
+    so the caller has parsed + raw + meta.
+
+    Teacher construction can download + load multi-GB weights — it runs in a
+    worker thread so a cold challenger never freezes the event loop (and with
+    it every other player's game)."""
     if not SELFPLAY_MODE:
         raise RuntimeError("SELFPLAY_MODE is off")
-    teacher = _challenger_teacher(challenger)
+    teacher = await asyncio.to_thread(_challenger_teacher, challenger)
     if teacher is None:
-        _ensure_teachers()
+        await asyncio.to_thread(_ensure_teachers)
         teacher = _player_teacher
     return await teacher.choose(_player_opponent(opp), _flip_state(state))
 
@@ -297,7 +306,7 @@ async def opponent_choose(state: Dict[str, Any], opp: Opponent):
         raise RuntimeError("SELFPLAY_MODE is off")
     if OPPONENT_IS_HOUSE:
         raise RuntimeError("opponent teacher is 'house' — use the live Reasoner")
-    _ensure_teachers()
+    await asyncio.to_thread(_ensure_teachers)
     return await _opponent_teacher.choose(opp, state)
 
 
