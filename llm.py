@@ -132,6 +132,10 @@ def _tf_generate(messages: List[Dict], max_new_tokens: int,
         enc = {k: v.to(model.device) for k, v in enc.items()}
         prompt_len = enc["input_ids"].shape[1]
         do_sample = bool(temperature and temperature > 0.0)
+        pad_id = tok.pad_token_id
+        if pad_id is None:  # some models define eos as a LIST — take the first
+            eos = tok.eos_token_id
+            pad_id = eos[0] if isinstance(eos, (list, tuple)) else eos
         with torch.no_grad():
             gen = model.generate(
                 **enc,
@@ -141,7 +145,7 @@ def _tf_generate(messages: List[Dict], max_new_tokens: int,
                 top_p=(top_p if do_sample else None),
                 output_scores=True,
                 return_dict_in_generate=True,
-                pad_token_id=(tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id),
+                pad_token_id=pad_id,
             )
         gen_ids = gen.sequences[0][prompt_len:]
         text = tok.decode(gen_ids, skip_special_tokens=True)

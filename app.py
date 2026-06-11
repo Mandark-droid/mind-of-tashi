@@ -385,11 +385,15 @@ async def player_turn(state_json: str) -> str:
             "reasoning": result.parsed["reasoning"],
             "taunt": result.parsed["taunt"],
             # surfaced in the watch-mode log so a silent llama.cpp->mock
-            # fallback (e.g. wheel missing) is visible, not mysterious
-            "backend": result.meta.get("reasoner_backend")
-                       or result.meta.get("backend"),
+            # fallback (e.g. wheel missing) is visible, not mysterious.
+            # meta["error"] covers base.Teacher's retry-exhausted GUARD
+            # fallback (generation-time failures, not load-time ones).
+            "backend": (result.meta.get("reasoner_backend")
+                        or result.meta.get("backend")
+                        or ("error" if result.meta.get("fallback") else None)),
             "model": result.meta.get("model"),
-            "load_error": result.meta.get("reasoner_error"),
+            "load_error": (result.meta.get("reasoner_error")
+                           or result.meta.get("error")),
         })
     except Exception as exc:
         print(f"[selfplay] player_turn failed: {exc}")

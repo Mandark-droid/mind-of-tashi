@@ -1893,8 +1893,8 @@
     const trimmed = String(pData.reasoning || "").slice(0, 240);
     const who = selfplayChallengerLabel || "You";
     const via = pData.backend && pData.backend !== "llama.cpp" ? ` <i>[${escapeHtml(pData.backend)}]</i>` : "";
-    if (pData.backend === "mock" && pData.load_error){
-      addLog(`<i>challenger model unavailable (${escapeHtml(String(pData.load_error).slice(0,120))}) — heuristic stands in</i>`);
+    if (pData.load_error){
+      addLog(`<i>challenger model trouble (${escapeHtml(String(pData.load_error).slice(0,140))}) — a fallback move stands in</i>`);
     }
     addLog(`<b>${escapeHtml(who)} (${pData.move})</b>${via}: <i>${escapeHtml(trimmed)}</i>`);
     commit(pData.move);  // not awaited — commit() chains itself via the auto-advance above
