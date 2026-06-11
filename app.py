@@ -95,6 +95,11 @@ app.mount("/assets", StaticFiles(directory=ASSETS), name="assets")
 reasoner = Reasoner()  # loaded once; reused across turns
 print(f"[app] opponent backend: {reasoner.backend}")
 
+# Warm the default self-play challenger's GGUF in the background at boot so
+# the first "Watch" click doesn't stall on a multi-hundred-MB download.
+if selfplay_live.SELFPLAY_MODE:
+    print(f"[app] selfplay prewarm: {selfplay_live.prewarm()}")
+
 
 # --- metadata injected into the page so the UI renders from one source ----
 # @gr_cache singleton: _meta() takes no arguments, returns the same payload on
@@ -345,6 +350,16 @@ async def submit_run(request: Request):
 @app.get("/live_traces_status")
 async def live_traces_status():
     return live_traces.status()
+
+
+@app.get("/prewarm_challenger")
+async def prewarm_challenger(id: str = ""):
+    """Fire-and-forget: download a self-play challenger's weights into the HF
+    cache. The UI calls this when the picker changes so the model is warm
+    before the watcher commits to a duel."""
+    if not selfplay_live.SELFPLAY_MODE:
+        return {"ok": False, "reason": "selfplay off"}
+    return {"ok": True, "status": selfplay_live.prewarm(id or None)}
 
 
 @app.api(name="player_turn")

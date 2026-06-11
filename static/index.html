@@ -664,6 +664,24 @@
   .ident-or{display:block; margin-top:4px; font-size:11.5px; opacity:.7}
   .ident-status{margin-top:8px; font-size:11.5px; color:var(--accent); text-align:center; min-height:1em}
 
+  /* === SELF-PLAY (Tashi vs Tashi) row on the intro card ================ */
+  /* Secondary to the main CTA: a quiet divider, then one compact line of
+     [challenger picker | watch button], then a one-line hint. */
+  #spRow{margin-top:16px}
+  .sp-divider{display:flex; align-items:center; gap:10px; margin-bottom:10px;
+    color:var(--bone-dim); font-size:10px; letter-spacing:.2em; text-transform:uppercase}
+  .sp-divider::before,.sp-divider::after{content:""; flex:1; height:1px; background:var(--line)}
+  .sp-controls{display:flex; gap:8px; align-items:stretch}
+  .sp-select{flex:1; min-width:0; padding:8px 10px; font-family:"Mukta";
+    font-size:12.5px; color:var(--bone); background:#0e151d;
+    border:1px solid var(--line); border-radius:10px; outline:none;
+    cursor:pointer; transition:.15s}
+  .sp-select:focus{border-color:var(--ember); box-shadow:0 0 0 3px rgba(232,161,58,.18)}
+  .sp-controls .btn.ghost{margin:0; white-space:nowrap; flex:0 0 auto;
+    padding:8px 16px; font-size:13px}
+  .sp-hint{margin-top:7px; font-size:11px; color:var(--bone-dim);
+    text-align:center; opacity:.75; min-height:1em}
+
   /* === HEADER LEADERBOARD LINK ======================================== */
   .lb-link{appearance:none; cursor:pointer; font-family:"Mukta";
     font-size:11px; letter-spacing:.14em; text-transform:uppercase;
@@ -1217,8 +1235,12 @@
            picker chooses WHO climbs (our SFT/GRPO micro, OpenBMB MiniCPM,
            NVIDIA Nemotron — all local GGUFs); the mountain stays the house. -->
       <div id="spRow" style="display:none">
-        <select class="ident-input" id="spChallenger" title="who climbs the mountain"></select>
-        <button class="btn ghost" id="cardBtnSelfplay">Watch self-play</button>
+        <div class="sp-divider"><span>or watch a duel of minds</span></div>
+        <div class="sp-controls">
+          <select class="sp-select" id="spChallenger" title="who climbs the mountain"></select>
+          <button class="btn ghost" id="cardBtnSelfplay">Watch</button>
+        </div>
+        <div class="sp-hint" id="spHint">your pick climbs the ladder — the mountain's own mind defends</div>
       </div>
       <div><button class="btn ghost" id="cardBtn2" style="display:none">Walk back down</button></div>
       <!-- B3 Share: appears on every post-match overlay (advance / clear /
@@ -2765,8 +2787,14 @@
                                 : META.selfplay.player_teacher;
       spBtn.title = `${lbl} vs ${houseLabel}`;
     };
-    syncTitle();
-    spSel.onchange = syncTitle;
+    // Warm the picked challenger's weights server-side the moment it's
+    // selected, so "Watch" doesn't stall on a multi-hundred-MB download.
+    const prewarm = () => {
+      if (!roster.length) return;
+      fetch(`/prewarm_challenger?id=${encodeURIComponent(spSel.value)}`).catch(() => {});
+    };
+    syncTitle(); prewarm();
+    spSel.onchange = () => { syncTitle(); prewarm(); };
     spBtn.onclick = () => {
       selfplayMode = true;
       if (roster.length){
@@ -2777,6 +2805,7 @@
       $("identBlock").style.display = "none";
       $("overlay").classList.add("hide");
       addLog(`<i>watch-mode: ${escapeHtml(selfplayChallengerLabel || META.selfplay.player_teacher)} challenges ${escapeHtml(houseLabel)}</i>`);
+      addLog(`<i>first summon loads the challenger's weights — the opening read can take a moment</i>`);
       newFight();
       setTimeout(selfplayCommit, 900);
     };

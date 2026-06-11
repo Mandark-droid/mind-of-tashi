@@ -37,6 +37,7 @@ self-play; this module is purely for visual demo.
 
 from __future__ import annotations
 import os
+import threading
 from typing import Any, Dict, Optional
 
 from opponents import Opponent
@@ -122,6 +123,40 @@ PLAYER_PERSONA = os.environ.get("SELFPLAY_PLAYER_PERSONA", "mirror")
 _player_teacher = None
 _opponent_teacher = None
 _challenger_teachers: Dict[str, Any] = {}
+_prewarmed: set = set()
+
+
+def prewarm(challenger: Optional[str] = None) -> str:
+    """Fire-and-forget GGUF download for a roster pick (default pick if None).
+
+    The first watch-mode round otherwise stalls for the whole multi-hundred-MB
+    fetch; warming on app boot + on picker change means the weights are
+    already in the HF cache by the time the watcher clicks. Download only —
+    the llama.cpp context is still built lazily on first use."""
+    if not SELFPLAY_MODE:
+        return "selfplay off"
+    name = challenger if challenger in CHALLENGERS else _DEFAULT_CHALLENGER
+    spec = _space_safe(CHALLENGERS[name]["spec"])
+    head, _, tail = spec.partition(":")
+    repo, _, fname = tail.partition(":")
+    if head != "llamacpp" or not repo or not fname:
+        return "nothing to prewarm"
+    key = f"{repo}/{fname}"
+    if key in _prewarmed:
+        return f"already warm: {key}"
+
+    def _dl():
+        try:
+            from huggingface_hub import hf_hub_download  # lazy
+            hf_hub_download(repo_id=repo, filename=fname)
+            print(f"[selfplay] prewarmed {key}")
+        except Exception as exc:
+            _prewarmed.discard(key)  # let a later request retry
+            print(f"[selfplay] prewarm failed for {key}: {exc}")
+
+    _prewarmed.add(key)
+    threading.Thread(target=_dl, daemon=True).start()
+    return f"warming: {key}"
 
 
 def status() -> Dict[str, Any]:
