@@ -1,23 +1,38 @@
 """
-selfplay_live.py — opt-in mode where the LIVE game runs two LLMs against
-each other through the UI. Useful for visual demos and for sanity-checking
-the bilingual <think> register on local models without burning API quota.
+selfplay_live.py — opt-in "Tashi vs Tashi" mode where the LIVE game runs two
+LLMs against each other through the UI. Useful for visual demos and for
+sanity-checking the bilingual <think> register on local models without
+burning API quota.
 
 Enable via env (in .env or Spaces Variables):
 
     SELFPLAY_MODE=1
-    SELFPLAY_PLAYER_TEACHER=ollama:qwen3:14b
-    SELFPLAY_OPPONENT_TEACHER=ollama:deepseek-r1:14b
+    SELFPLAY_PLAYER_TEACHER=ollama:qwen3:14b      # optional; see defaults
+    SELFPLAY_OPPONENT_TEACHER=house               # optional; see defaults
 
 Both specs go through `teachers.make_teacher` so any backend in the pool
-works — `ollama:`, `gemini:`, `openrouter:`, `mistral:`, `sarvam:`, even
-`mock`. The local game keeps its normal Reasoner (llama.cpp / mock) when
-SELFPLAY_MODE is off.
+works — `llamacpp:`, `ollama:`, `gemini:`, `openrouter:`, `mistral:`,
+`sarvam:`, even `mock`. The special opponent spec `house` keeps the Space's
+own Reasoner (the deployed mind of Tashi) on the opponent side — app.ai_turn
+checks OPPONENT_IS_HOUSE and skips the teacher entirely, so watch-mode
+matches keep the Conviction Meter / composure / grammar-locked Oath path.
 
-In self-play mode `live_traces` capture is skipped — these matches are
-two-AI play, not real player data, and shouldn't be confused at SFT-prep
-time. The synthetic `tools/selfplay.py` harness is the right pipeline for
-SFT-bound self-play; this module is purely for visual demo.
+OFF-THE-GRID GUARD: on a deployed Space (SPACE_ID set) cloud/API teacher
+specs are refused and coerced to local llama.cpp — the Space never phones a
+cloud provider, in self-play or otherwise. Same contract as the gym's
+hard-refusal of `OPPONENT_BACKEND=api`.
+
+CHALLENGER ROSTER: the watcher picks who climbs the ladder. Every entry is
+a GGUF pulled from the Hub and run in-process via llama.cpp (CPU), so the
+roster is Space-safe by construction — and it deliberately fields OpenBMB's
+MiniCPM5-1B and NVIDIA's Nemotron-3-Nano-4B next to our own SFT/GRPO micro
+models, so you can watch a 0.4B MoE out-read (or get out-read by) the
+sponsor-class smalls.
+
+In self-play matches `live_traces` capture is skipped — these are two-AI
+play, not real player data, and shouldn't be confused at SFT-prep time. The
+synthetic `tools/selfplay.py` harness is the right pipeline for SFT-bound
+self-play; this module is purely for visual demo.
 """
 
 from __future__ import annotations
@@ -29,22 +44,68 @@ from otel_bootstrap import init_otel
 
 
 SELFPLAY_MODE = os.environ.get("SELFPLAY_MODE", "0") == "1"
+ON_SPACE = bool(os.environ.get("SPACE_ID"))
 
 # Instrument up front (cheap no-op when disabled) so the LLM teachers we
 # lazily construct later get auto-traced. Safe to call regardless of
-# SELFPLAY_MODE — init_otel is idempotent.
-if SELFPLAY_MODE:
+# SELFPLAY_MODE — init_otel is idempotent. NEVER on a Space: the default
+# OTLP endpoint is the dev VM, and an Off-the-Grid Space exports nothing.
+if SELFPLAY_MODE and not ON_SPACE:
     init_otel(service_name="mind-of-tashi-selfplay-live")
-# Defaults tuned for 6 GB VRAM (RTX 3060): qwen3.5:4b on opponent for
-# stronger reads (returns in ~3s on the user's box), qwen3:1.7b on
-# player for fast moves. Different scales -> Ollama swaps cleanly,
-# total wall per round is dominated by the opponent generation.
-PLAYER_TEACHER_SPEC = os.environ.get(
-    "SELFPLAY_PLAYER_TEACHER", "ollama:qwen3:1.7b"
-)
-OPPONENT_TEACHER_SPEC = os.environ.get(
-    "SELFPLAY_OPPONENT_TEACHER", "ollama:qwen3.5:4b"
-)
+
+_LOCAL_HEADS = ("mock", "llamacpp", "house")
+
+
+def _space_safe(spec: str, fallback: str = "llamacpp") -> str:
+    """Coerce cloud/API teacher specs to a local one on a deployed Space."""
+    if not ON_SPACE:
+        return spec
+    head = spec.partition(":")[0].strip().lower()
+    if head in _LOCAL_HEADS:
+        return spec
+    print(f"[selfplay] {spec!r} is a cloud/API teacher — refused on a Space "
+          f"(Off-the-Grid). Using {fallback!r}.")
+    return fallback
+
+
+# The watcher-facing challenger roster: who plays the PLAYER side. All are
+# llama.cpp GGUFs (local inference only). Order = UI order; first is default.
+CHALLENGERS: Dict[str, Dict[str, str]] = {
+    "tashi-grpo": {
+        "label": "Tashi micro GRPO · 0.4B MoE (ours)",
+        "spec": "llamacpp:build-small-hackathon/mind-of-tashi-micro-grpo-gguf:mind-of-tashi-micro-grpo-Q4_K_M.gguf",
+    },
+    "tashi-sft": {
+        "label": "Tashi micro SFT · 0.4B MoE (ours)",
+        "spec": "llamacpp:build-small-hackathon/mind-of-tashi-micro-sft-gguf:mind-of-tashi-micro-sft-Q4_K_M.gguf",
+    },
+    "minicpm5-1b": {
+        "label": "MiniCPM5 1B (OpenBMB)",
+        "spec": "llamacpp:openbmb/MiniCPM5-1B-GGUF:MiniCPM5-1B-Q4_K_M.gguf",
+    },
+    "nemotron-4b": {
+        "label": "Nemotron 3 Nano 4B (NVIDIA)",
+        "spec": "llamacpp:unsloth/NVIDIA-Nemotron-3-Nano-4B-GGUF:NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf",
+    },
+}
+_DEFAULT_CHALLENGER = next(iter(CHALLENGERS))
+
+# Defaults: on a Space the player side is the GRPO challenger and the
+# opponent side is `house` (the Space's own deployed mind — ZeroGPU
+# transformers or whatever BACKEND says). Locally the old Ollama pair is
+# kept for the 6 GB VRAM (RTX 3060) dev box: qwen3.5:4b opponent for
+# stronger reads, qwen3:1.7b player for fast moves.
+PLAYER_TEACHER_SPEC = _space_safe(os.environ.get(
+    "SELFPLAY_PLAYER_TEACHER",
+    CHALLENGERS[_DEFAULT_CHALLENGER]["spec"] if ON_SPACE else "ollama:qwen3:1.7b",
+), fallback=CHALLENGERS[_DEFAULT_CHALLENGER]["spec"])
+OPPONENT_TEACHER_SPEC = _space_safe(os.environ.get(
+    "SELFPLAY_OPPONENT_TEACHER",
+    "house" if ON_SPACE else "ollama:qwen3.5:4b",
+), fallback="house")
+# app.ai_turn checks this: house = use the live Reasoner for the opponent
+# side of self-play matches (no second model, full conviction/oath path).
+OPPONENT_IS_HOUSE = OPPONENT_TEACHER_SPEC.strip().lower() == "house"
 # Player persona to role-play. "mirror" = use the same persona as the current
 # opponent (mirror match, simplest). Any LADDER id (tashi/norbu/pema/drogpa/
 # the-mountain) pins the player teacher to that persona for the whole run.
@@ -53,16 +114,21 @@ PLAYER_PERSONA = os.environ.get("SELFPLAY_PLAYER_PERSONA", "mirror")
 
 _player_teacher = None
 _opponent_teacher = None
+_challenger_teachers: Dict[str, Any] = {}
 
 
 def status() -> Dict[str, Any]:
     """Surfaced into the page meta so the UI can decide whether to show
-    the "Watch self-play" button."""
+    the "Watch self-play" button (and which challengers to offer)."""
     return {
         "enabled": bool(SELFPLAY_MODE),
         "player_teacher": PLAYER_TEACHER_SPEC if SELFPLAY_MODE else None,
         "opponent_teacher": OPPONENT_TEACHER_SPEC if SELFPLAY_MODE else None,
         "player_persona": PLAYER_PERSONA if SELFPLAY_MODE else None,
+        "challengers": (
+            [{"id": k, "label": v["label"]} for k, v in CHALLENGERS.items()]
+            if SELFPLAY_MODE else []
+        ),
     }
 
 
@@ -72,10 +138,26 @@ def _ensure_teachers():
     global _player_teacher, _opponent_teacher
     if not SELFPLAY_MODE:
         return
-    if _player_teacher is None or _opponent_teacher is None:
+    if _player_teacher is None:
         from teachers import make_teacher  # lazy
         _player_teacher = make_teacher(PLAYER_TEACHER_SPEC)
+    if _opponent_teacher is None and not OPPONENT_IS_HOUSE:
+        from teachers import make_teacher  # lazy
         _opponent_teacher = make_teacher(OPPONENT_TEACHER_SPEC)
+
+
+def _challenger_teacher(challenger: Optional[str]):
+    """Teacher for a roster pick; None -> fall through to PLAYER_TEACHER_SPEC.
+    Built once per challenger and cached — each is its own llama.cpp context,
+    so switching challengers mid-session never reloads an earlier pick."""
+    if not challenger or challenger not in CHALLENGERS:
+        return None
+    t = _challenger_teachers.get(challenger)
+    if t is None:
+        from teachers import make_teacher  # lazy
+        t = make_teacher(_space_safe(CHALLENGERS[challenger]["spec"]))
+        _challenger_teachers[challenger] = t
+    return t
 
 
 def _player_opponent(opp: Opponent) -> Opponent:
@@ -109,27 +191,36 @@ def _flip_state(state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def player_choose(state: Dict[str, Any], opp: Opponent):
+async def player_choose(state: Dict[str, Any], opp: Opponent,
+                        challenger: Optional[str] = None):
     """Ask the player teacher for a blind-commit move on its turn.
-    Returns a teachers.ChoiceResult so the caller has parsed + raw + meta."""
+    `challenger` is a CHALLENGERS roster id (from the UI picker); unset or
+    unknown falls back to PLAYER_TEACHER_SPEC. Returns a teachers.ChoiceResult
+    so the caller has parsed + raw + meta."""
     if not SELFPLAY_MODE:
         raise RuntimeError("SELFPLAY_MODE is off")
-    _ensure_teachers()
-    return await _player_teacher.choose(_player_opponent(opp), _flip_state(state))
+    teacher = _challenger_teacher(challenger)
+    if teacher is None:
+        _ensure_teachers()
+        teacher = _player_teacher
+    return await teacher.choose(_player_opponent(opp), _flip_state(state))
 
 
 async def opponent_choose(state: Dict[str, Any], opp: Opponent):
     """Ask the opponent teacher for its move — replaces llm.Reasoner.choose
-    when SELFPLAY_MODE is on, so both sides are LLM-driven."""
+    for self-play matches, so both sides are LLM-driven. Not called when
+    OPPONENT_IS_HOUSE (app.ai_turn keeps the live Reasoner instead)."""
     if not SELFPLAY_MODE:
         raise RuntimeError("SELFPLAY_MODE is off")
+    if OPPONENT_IS_HOUSE:
+        raise RuntimeError("opponent teacher is 'house' — use the live Reasoner")
     _ensure_teachers()
     return await _opponent_teacher.choose(opp, state)
 
 
 async def aclose() -> None:
     """Best-effort cleanup of underlying teacher sessions (used on shutdown)."""
-    for t in (_player_teacher, _opponent_teacher):
+    for t in (_player_teacher, _opponent_teacher, *_challenger_teachers.values()):
         if t is not None:
             try:
                 await t.aclose()

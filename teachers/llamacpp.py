@@ -19,11 +19,15 @@ class LlamaCppTeacher(Teacher):
     name = "llamacpp"
     max_retries = 0  # local; no transient errors worth retrying on
 
-    def __init__(self) -> None:
-        # imported lazily so requirements don't force llama_cpp at module load
+    def __init__(self, repo: str | None = None, filename: str | None = None) -> None:
+        # imported lazily so requirements don't force llama_cpp at module load.
+        # repo/filename let a self-play challenger load a different GGUF than
+        # the house model; backend is pinned to llamacpp so a Space running
+        # BACKEND=transformers doesn't route challengers through its singleton.
         from llm import Reasoner
-        self._reasoner = Reasoner()
-        self._model = f"{os.environ.get('MODEL_REPO', '?')}/{os.environ.get('MODEL_FILE', '?')}"
+        self._reasoner = Reasoner(repo=repo, filename=filename, backend="llamacpp")
+        self._model = (f"{repo or os.environ.get('MODEL_REPO', '?')}"
+                       f"/{filename or os.environ.get('MODEL_FILE', '?')}")
 
     def _choose_sync(
         self, opp: Opponent, state: Dict[str, Any], legal: List[str]

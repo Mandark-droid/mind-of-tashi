@@ -13,3 +13,8 @@ transformers>=5.5
 torch>=2.8
 accelerate
 huggingface_hub>=0.27.0
+# llama.cpp runtime for the self-play CHALLENGER roster (SELFPLAY_MODE=1):
+# challenger GGUFs (our SFT/GRPO micro, MiniCPM5-1B, Nemotron-4B) run
+# in-process on CPU — separate from the house opponent's transformers/ZeroGPU
+# backend, and still Off-the-Grid (local inference, no cloud API).
+llama-cpp-python>=0.3.0

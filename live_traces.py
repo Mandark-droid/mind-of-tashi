@@ -24,9 +24,15 @@ Lifecycle:
        data/live/<match_id>.jsonl. Fast (one append, no network).
 
   end_session(match_id, outcome, won, total_turns, total_seconds)
-       called from app.submit_run when the player ends the run. Writes a
-       final `_kind="match_end"` line into the file. Does NOT upload —
-       the daily cron pushes all data/live/*.jsonl to the Hub.
+       called from app.submit_run when the player ends the run. Seals the
+       file into one multi-turn SFT row, then (when LIVE_TRACES_REPO +
+       HF_TOKEN are configured) pushes that sealed file to the Hub dataset
+       IMMEDIATELY in a background thread. On a deployed Space there is no
+       cron and container storage is ephemeral — pushing at seal time is the
+       only way real-player traces survive a restart. The local daily cron
+       (tools/push_live_to_hub.py) remains for dev boxes; both writers use
+       the same per-match filename at the repo root, so they are idempotent
+       with each other.
 
 If LIVE_TRACES_REPO or HF_TOKEN are missing, status().ready is False and
 all calls are silent no-ops — the live game keeps working unaffected.
@@ -61,6 +67,38 @@ LOCAL_DIR = Path(os.environ.get(
 # default, but we don't rely on that. POSIX appends are atomic for small
 # writes anyway; this lock just keeps in-process turns from interleaving.
 _LOCK = threading.RLock()
+
+_api = None
+_repo_ready = False
+
+
+def _upload_sealed(path: Path, match_id: str) -> None:
+    """Best-effort push of ONE sealed match file to the Hub dataset.
+
+    Runs on a daemon thread from end_session — never blocks or fails the
+    request. Per-match filenames mean concurrent sessions can't collide
+    (same pattern as leaderboard.py's per-run files)."""
+    global _api, _repo_ready
+    if not (LIVE_TRACES_REPO and HF_TOKEN) or LIVE_TRACES_DISABLE:
+        return
+    try:
+        from huggingface_hub import HfApi, create_repo  # noqa: WPS433
+        if _api is None:
+            _api = HfApi(token=HF_TOKEN)
+        if not _repo_ready:
+            create_repo(LIVE_TRACES_REPO, repo_type="dataset", private=True,
+                        token=HF_TOKEN, exist_ok=True)
+            _repo_ready = True
+        _api.upload_file(
+            path_or_fileobj=str(path),
+            path_in_repo=path.name,   # repo root — same layout as the cron
+            repo_id=LIVE_TRACES_REPO,
+            repo_type="dataset",
+            commit_message=f"live match {match_id}",
+        )
+        print(f"[live_traces] pushed {path.name} -> {LIVE_TRACES_REPO}")
+    except Exception as exc:
+        print(f"[live_traces] hub push failed for {path.name}: {exc}")
 
 
 def status() -> Dict[str, Any]:
@@ -238,3 +276,9 @@ def end_session(
         # were durability scratch; the SFT-shape is what we keep.
         with path.open("w", encoding="utf-8") as f:
             f.write(json.dumps(consolidated, ensure_ascii=False) + "\n")
+
+    # Ship it now — on a Space the container disk is ephemeral and there is
+    # no cron, so seal time is the only reliable push point.
+    threading.Thread(
+        target=_upload_sealed, args=(path, match_id), daemon=True,
+    ).start()

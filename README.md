@@ -16,15 +16,23 @@ tags:
   - llama-champion
   - off-brand
   - well-tuned
+  - tiny-titan
   - sharing-is-caring
   - field-notes
   - zerogpu
   - modal
+  - openbmb
+  - minicpm
+  - nemotron
   - reasoning-game
   - bilingual
 models:
   - build-small-hackathon/mind-of-tashi-micro-sft
   - build-small-hackathon/mind-of-tashi-micro-sft-gguf
+  - build-small-hackathon/mind-of-tashi-micro-grpo
+  - build-small-hackathon/mind-of-tashi-micro-grpo-gguf
+  - openbmb/MiniCPM5-1B-GGUF
+  - unsloth/NVIDIA-Nemotron-3-Nano-4B-GGUF
 datasets:
   - build-small-hackathon/mind-of-tashi-selfplay
 ---
@@ -116,6 +124,9 @@ The web layer is model-agnostic. Configure via Space **Variables** / env:
 | `FORCE_MOCK` | `0` | set `1` to force the heuristic opponent |
 | `LEADERBOARD_REPO` | unset | `build-small-hackathon/mind-of-tashi-runs` to enable the board |
 | `HF_TOKEN` | unset | write-scoped, in Space **Secrets**, for leaderboard writes |
+| `SELFPLAY_MODE` | `0` | `1` shows **Watch self-play** (Tashi vs Tashi) on the intro card |
+| `SELFPLAY_PLAYER_TEACHER` | roster default | override the player side; on a Space only local specs (`llamacpp:…`, `mock`) are accepted |
+| `SELFPLAY_OPPONENT_TEACHER` | `house` (Space) | `house` keeps the deployed mind as the defender |
 
 **Two runtimes, one model.** The deployed Space runs the student through
 **transformers on Hugging Face ZeroGPU** — a GPU is allocated on demand per move
@@ -125,15 +136,41 @@ runtime, clone the repo and `docker build` (or `pip install llama-cpp-python`
 and set `BACKEND=llamacpp`) — the same GGUF student then runs on CPU, no GPU
 needed. `BACKEND=transformers` selects the ZeroGPU path.
 
+## Tashi vs Tashi — watch the minds duel
+
+With `SELFPLAY_MODE=1` the intro card grows a **Watch self-play** button and a
+challenger picker: choose who climbs the mountain, take your hands off, and
+watch both mind-scrolls reason against each other through the same UI. The
+**challenger roster** is all local GGUFs run in-process via llama.cpp (CPU —
+no ZeroGPU minutes, no cloud API):
+
+| Challenger | Why it's here |
+|---|---|
+| **Tashi micro GRPO** (0.4B MoE, ours) | the RL-trained student — our best read |
+| **Tashi micro SFT** (0.4B MoE, ours) | the pre-GRPO checkpoint, for A/B-ing the training story |
+| **MiniCPM5 1B** (OpenBMB) | sponsor-class small — can it out-read a model half its size? |
+| **Nemotron 3 Nano 4B** (NVIDIA) | the big sibling — 10× the active params, same blind commit |
+
+The defender is always the **house mind** — the Space's own deployed opponent
+(ZeroGPU transformers), with the Conviction Meter, composure cracking, and
+grammar-locked Oath all live. Watch-mode matches never touch the leaderboard
+or the live-traces dataset, and human games are completely unaffected by the
+flag. On a Space, cloud/API teacher specs are refused outright — self-play is
+Off-the-Grid by construction.
+
 ## Bonus badges targeted
 
 - **Off the Grid** — the opponent runs locally (ZeroGPU transformers in-Space, or
   llama.cpp on a clone); no cloud API at request time.
-- **Llama Champion** — the GGUF student runs through the llama.cpp runtime (the
-  Docker / local path).
+- **Llama Champion** — the GGUF student runs through the llama.cpp runtime: the
+  Docker / local path, **and in the deployed Space itself** (the self-play
+  challenger roster is llama.cpp end-to-end).
 - **Off-Brand** — fully custom frontend on `gradio.Server` (Gradio 6).
 - **Well-Tuned** — a fine-tuned custom-MoE student (SFT + GRPO), shipped as both
   safetensors and GGUF.
+- **Tiny Titan** — ~0.4B total / **~200M active** per token: by far the smallest
+  fine-tuned mind in the wood, and you can watch it duel 1B–4B challengers in
+  self-play.
 - **Sharing is Caring** — everything is published openly on the Hub: the
   [self-play dataset](https://huggingface.co/datasets/build-small-hackathon/mind-of-tashi-selfplay),
   the [leaderboard runs](https://huggingface.co/datasets/build-small-hackathon/mind-of-tashi-runs),
@@ -160,9 +197,13 @@ A **Build Small Hackathon (Track Two)** submission, made possible by:
 - **[llama.cpp](https://github.com/ggml-org/llama.cpp)** — the local inference
   runtime (the *Llama Champion* path): clone + `docker build` and the same GGUF
   student runs entirely on CPU, no cloud.
-- **[NVIDIA](https://www.nvidia.com/)** — the silicon under all of it: ZeroGPU's
-  RTX Pro 6000 Blackwell at runtime, L4 for training on Modal, and a local
-  RTX 3060 for the dev loop.
+- **[NVIDIA](https://www.nvidia.com/)** — the silicon under all of it (ZeroGPU's
+  RTX Pro 6000 Blackwell at runtime, L4 for training on Modal, a local RTX 3060
+  for the dev loop) — and **Nemotron 3 Nano 4B** fights in the self-play
+  challenger roster.
+- **[OpenBMB](https://www.openbmb.cn/)** — **MiniCPM5-1B** is a self-play
+  challenger: the sponsor-class 1B versus our 200M-active student, live in the
+  arena.
 
 ## Watch & follow
 

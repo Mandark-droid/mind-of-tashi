@@ -131,10 +131,13 @@ async def ai_turn(state_json: str) -> str:
     """One simultaneous exchange. Input/output are JSON strings for safe marshalling.
 
     Two opponent backends:
-      - normal: llm.Reasoner (llama.cpp / mock) — what the deployed Space uses
-      - self-play (SELFPLAY_MODE=1): selfplay_live's opponent_teacher (typically
-        an Ollama model), so both sides of the duel are LLMs and the human is
-        just watching.
+      - normal: llm.Reasoner (transformers / llama.cpp / mock) — what every
+        human-driven match uses, SELFPLAY_MODE or not.
+      - self-play watch-mode (SELFPLAY_MODE=1 AND the round is flagged
+        state["selfplay"]=true by the UI): selfplay_live's opponent_teacher —
+        unless that spec is "house", in which case the live Reasoner stays in
+        (full Conviction Meter / composure / Oath path) and only the player
+        side is a teacher model.
     """
     state = json.loads(state_json)
     opp = opponents.get(state["opponent_id"])
@@ -166,7 +169,11 @@ async def ai_turn(state_json: str) -> str:
     player_move = str(state.get("player_move", "FOCUS")).upper()
 
     # The opponent commits BLIND — it sees `history` only, never player_move.
-    if selfplay_live.SELFPLAY_MODE:
+    # Watch-mode matches flag themselves via state["selfplay"]; human matches
+    # always take the live Reasoner, so SELFPLAY_MODE=1 can stay on for a
+    # deployed Space without touching real players' games.
+    is_selfplay = bool(selfplay_live.SELFPLAY_MODE and state.get("selfplay"))
+    if is_selfplay and not selfplay_live.OPPONENT_IS_HOUSE:
         result_obj = await selfplay_live.opponent_choose(state, opp)
         decision, raw = result_obj.parsed, result_obj.raw
     else:
@@ -178,9 +185,9 @@ async def ai_turn(state_json: str) -> str:
 
     # Capture the AI turn into the per-match JSONL (best-effort; never fails
     # the request). The match-end summary is written in /submit_run. We
-    # explicitly DO NOT capture in self-play mode — those rows would mix
+    # explicitly DO NOT capture self-play matches — those rows would mix
     # two-AI play into the real-player dataset.
-    if not selfplay_live.SELFPLAY_MODE:
+    if not is_selfplay:
         try:
             live_traces.capture_turn(
                 match_id=match_id, opp=opp, state=state,
@@ -356,11 +363,17 @@ async def player_turn(state_json: str) -> str:
     try:
         state = json.loads(state_json)
         opp = opponents.get(state["opponent_id"])
-        result = await selfplay_live.player_choose(state, opp)
+        result = await selfplay_live.player_choose(
+            state, opp, challenger=state.get("challenger"))
         return json.dumps({
             "move": result.parsed["move"],
             "reasoning": result.parsed["reasoning"],
             "taunt": result.parsed["taunt"],
+            # surfaced in the watch-mode log so a silent llama.cpp->mock
+            # fallback (e.g. wheel missing) is visible, not mysterious
+            "backend": result.meta.get("reasoner_backend")
+                       or result.meta.get("backend"),
+            "model": result.meta.get("model"),
         })
     except Exception as exc:
         print(f"[selfplay] player_turn failed: {exc}")

@@ -19,6 +19,8 @@ Spec strings (the `--a-teacher` / `--b-teacher` CLI args):
 
     mock                                     — heuristic; no network, no model
     llamacpp                                 — local llama.cpp via env vars
+    llamacpp:<hub-repo>:<gguf-file>          — local llama.cpp, explicit GGUF
+                                               e.g. llamacpp:openbmb/MiniCPM5-1B-GGUF:MiniCPM5-1B-Q4_K_M.gguf
     ollama:<model>                           — local Ollama, e.g. ollama:qwen3:14b
     gemini:<model>                           — Google Gemini, e.g. gemini:gemini-2.0-flash-exp
     openrouter:<author>/<model>[:<variant>]  — e.g. openrouter:meta-llama/llama-3.3-70b-instruct:free
@@ -48,7 +50,15 @@ def make_teacher(spec: str) -> Teacher:
 
     if head == "llamacpp":
         from .llamacpp import LlamaCppTeacher
-        return LlamaCppTeacher()
+        if not tail:
+            return LlamaCppTeacher()
+        repo, _, fname = tail.partition(":")  # repo ids never contain ':'
+        if not repo or not fname:
+            raise ValueError(
+                "llamacpp with an explicit model needs both parts: "
+                "llamacpp:<hub-repo>:<gguf-file>"
+            )
+        return LlamaCppTeacher(repo=repo, filename=fname)
 
     if head == "ollama":
         if not tail:

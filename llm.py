@@ -21,7 +21,7 @@ import math
 import os
 import random
 from collections import Counter
-from typing import Dict, Iterator, List, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import prompts
 from engine import MOVES, ATTACKS, MAX_HP
@@ -144,12 +144,17 @@ def _tf_generate(messages: List[Dict], max_new_tokens: int,
 
 
 class Reasoner:
-    def __init__(self) -> None:
+    def __init__(self, repo: Optional[str] = None, filename: Optional[str] = None,
+                 backend: Optional[str] = None) -> None:
+        """repo/filename override MODEL_REPO/MODEL_FILE (llama.cpp path only);
+        backend overrides the BACKEND env. Both exist for the self-play
+        challenger roster, which loads a *different* GGUF per challenger while
+        the Space's house opponent keeps its own backend untouched."""
         self.llm = None
         self.backend = "mock"
         if FORCE_MOCK:
             return
-        backend = BACKEND or "llamacpp"   # default = llama.cpp (Llama Champion) for local clones
+        backend = (backend or BACKEND or "llamacpp")  # default = llama.cpp (Llama Champion) for local clones
         if backend == "mock":
             return
         if backend == "transformers":
@@ -165,8 +170,8 @@ class Reasoner:
         try:
             from llama_cpp import Llama  # noqa: WPS433
             common = dict(
-                repo_id=MODEL_REPO,
-                filename=MODEL_FILE,
+                repo_id=repo or MODEL_REPO,
+                filename=filename or MODEL_FILE,
                 n_ctx=N_CTX,
                 n_threads=N_THREADS,
                 n_gpu_layers=int(os.environ.get("N_GPU_LAYERS", "0")),  # 0 = CPU-only, the reliable path on Spaces

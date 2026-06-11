@@ -1213,8 +1213,13 @@
 
       <button class="btn" id="cardBtn">Enter the mist</button>
       <!-- Shown only when SELFPLAY_MODE=1 — see selfplay_live.py. Lets the
-           player watch two LLMs duel through the same UI + animations. -->
-      <div><button class="btn ghost" id="cardBtnSelfplay" style="display:none">Watch self-play</button></div>
+           player watch two LLMs duel through the same UI + animations. The
+           picker chooses WHO climbs (our SFT/GRPO micro, OpenBMB MiniCPM,
+           NVIDIA Nemotron — all local GGUFs); the mountain stays the house. -->
+      <div id="spRow" style="display:none">
+        <select class="ident-input" id="spChallenger" title="who climbs the mountain"></select>
+        <button class="btn ghost" id="cardBtnSelfplay">Watch self-play</button>
+      </div>
       <div><button class="btn ghost" id="cardBtn2" style="display:none">Walk back down</button></div>
       <!-- B3 Share: appears on every post-match overlay (advance / clear /
            defeat / double_ko). Renders a 1080x1080 PNG of the result via
@@ -1515,6 +1520,9 @@
   // "Watch self-play" button on the intro card (shown only when the backend
   // reports META.selfplay.enabled = true).
   let selfplayMode = false;
+  // challenger roster pick (META.selfplay.challengers id) — who plays the
+  // player side in watch-mode. Label is kept for the round log.
+  let selfplayChallenger = null, selfplayChallengerLabel = null;
   let lastStatus = null;
   $("backend").textContent = "opponent: " + META.backend;
   renderPips(); renderLadder();
@@ -1782,6 +1790,7 @@
     { const m = $("cmMeter"); if (m) m.style.visibility = "hidden"; }  // (composure too)
     startReadingRotation();
     state.player_move = playerMove;
+    state.selfplay = selfplayMode;  // flags watch-mode rounds server-side (teacher path + no trace capture)
     state.oath = pendingOath || null;   // E3: the seal travels with the commit
     let data;
     try {
@@ -1841,7 +1850,9 @@
     let pData;
     try {
       if (!client) client = await Client.connect(window.location.origin);
-      const res = await client.predict("/player_turn", { state_json: JSON.stringify(state) });
+      // challenger = the roster pick driving the player side this run
+      const res = await client.predict("/player_turn", { state_json: JSON.stringify(
+        { ...state, challenger: selfplayChallenger }) });
       pData = JSON.parse(res.data[0]);
     } catch (e) {
       addLog(`<i>self-play stopped: ${e.message || e}</i>`);
@@ -1855,7 +1866,9 @@
     // mind-scroll for the opponent (the canonical "your mind" of the game)
     // while still letting the watcher see both sides reason.
     const trimmed = String(pData.reasoning || "").slice(0, 240);
-    addLog(`<b>You (${pData.move})</b>: <i>${escapeHtml(trimmed)}</i>`);
+    const who = selfplayChallengerLabel || "You";
+    const via = pData.backend && pData.backend !== "llama.cpp" ? ` <i>[${escapeHtml(pData.backend)}]</i>` : "";
+    addLog(`<b>${escapeHtml(who)} (${pData.move})</b>${via}: <i>${escapeHtml(trimmed)}</i>`);
     commit(pData.move);  // not awaited — commit() chains itself via the auto-advance above
   }
 
@@ -2577,6 +2590,9 @@
 
   async function submitRun(won){
     runActive = false;
+    // watch-mode runs are model-vs-model — never the human's score; keep
+    // them off the leaderboard entirely.
+    if (selfplayMode) return;
     const payload = {
       username: currentName(),
       total_turns: runTurns,
@@ -2730,14 +2746,37 @@
   // match: the human takes their hands off, the loop auto-commits both
   // sides each round via /player_turn + /ai_turn.
   if (META.selfplay && META.selfplay.enabled){
-    const spBtn = $("cardBtnSelfplay");
-    spBtn.style.display = "";
-    spBtn.title = `${META.selfplay.player_teacher} vs ${META.selfplay.opponent_teacher}`;
+    const spRow = $("spRow"), spBtn = $("cardBtnSelfplay"), spSel = $("spChallenger");
+    spRow.style.display = "";
+    // Challenger roster (selfplay_live.CHALLENGERS): our SFT/GRPO micro
+    // models plus OpenBMB MiniCPM5-1B and NVIDIA Nemotron-4B — the watcher
+    // picks who climbs; the mountain (house mind) defends.
+    const roster = META.selfplay.challengers || [];
+    for (const c of roster){
+      const o = document.createElement("option");
+      o.value = c.id; o.textContent = c.label;
+      spSel.appendChild(o);
+    }
+    if (!roster.length) spSel.style.display = "none";
+    const houseLabel = META.selfplay.opponent_teacher === "house"
+      ? `the house mind (${META.backend})` : META.selfplay.opponent_teacher;
+    const syncTitle = () => {
+      const lbl = roster.length ? spSel.options[spSel.selectedIndex].textContent
+                                : META.selfplay.player_teacher;
+      spBtn.title = `${lbl} vs ${houseLabel}`;
+    };
+    syncTitle();
+    spSel.onchange = syncTitle;
     spBtn.onclick = () => {
       selfplayMode = true;
+      if (roster.length){
+        selfplayChallenger = spSel.value;
+        selfplayChallengerLabel = spSel.options[spSel.selectedIndex].textContent;
+      }
       // hide the identity block — no human is competing in self-play
       $("identBlock").style.display = "none";
       $("overlay").classList.add("hide");
+      addLog(`<i>watch-mode: ${escapeHtml(selfplayChallengerLabel || META.selfplay.player_teacher)} challenges ${escapeHtml(houseLabel)}</i>`);
       newFight();
       setTimeout(selfplayCommit, 900);
     };
