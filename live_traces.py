@@ -13,9 +13,9 @@ Key differences from the synthetic self-play harvest:
   * one JSONL file per match (mirrors leaderboard.py's per-run file pattern)
     so concurrent sessions never race-overwrite. Each file holds the full
     session: one row per AI turn + a closing match-end row.
-  * pushed to a SEPARATE private HF Dataset (default
-    `kshitijthakkar/mind-of-tashi-live-traces`) so we can stratify training
-    on synthetic vs real-player provenance later if we want.
+  * pushed to a SEPARATE public HF Dataset (set LIVE_TRACES_REPO, e.g.
+    `build-small-hackathon/mind-of-tashi-live-traces`) so we can stratify
+    training on synthetic vs real-player provenance later if we want.
 
 Lifecycle:
 
@@ -86,7 +86,10 @@ def _upload_sealed(path: Path, match_id: str) -> None:
         if _api is None:
             _api = HfApi(token=HF_TOKEN)
         if not _repo_ready:
-            create_repo(LIVE_TRACES_REPO, repo_type="dataset", private=True,
+            # PUBLIC: live traces are part of the Sharing-is-Caring bundle.
+            # No personal identifiers in the SFT target; the metadata only
+            # carries the (already public) leaderboard display name.
+            create_repo(LIVE_TRACES_REPO, repo_type="dataset", private=False,
                         token=HF_TOKEN, exist_ok=True)
             _repo_ready = True
         _api.upload_file(

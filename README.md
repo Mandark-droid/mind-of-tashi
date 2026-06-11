@@ -173,6 +173,8 @@ Off-the-Grid by construction.
   self-play.
 - **Sharing is Caring** — everything is published openly on the Hub: the
   [self-play dataset](https://huggingface.co/datasets/build-small-hackathon/mind-of-tashi-selfplay),
+  the [live gameplay traces](https://huggingface.co/datasets/build-small-hackathon/mind-of-tashi-live-traces)
+  (real matches, sealed + pushed straight from this Space),
   the [leaderboard runs](https://huggingface.co/datasets/build-small-hackathon/mind-of-tashi-runs),
   the SFT + GRPO models + GGUFs, and the OpenEnv gym — all cross-linked in one
   [collection](https://huggingface.co/collections/build-small-hackathon/the-mind-of-tashi-6a27107214f1265b159ade35).

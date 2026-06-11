@@ -10,7 +10,7 @@ Companion to push_to_hub.py. Differences:
 - Each row is already a multi-turn SFT example: the model sees the FULL
   conversation across all rounds, so it learns long-range patterns rather
   than relying on the prompt's history-block summary.
-- Target repo: kshitijthakkar/mind-of-tashi-live-traces (private) by default.
+- Target repo: build-small-hackathon/mind-of-tashi-live-traces (public) by default.
 
 USAGE (from mind-of-tashi/):
   python -m tools.push_live_to_hub                    # default repo, private
@@ -76,7 +76,7 @@ configs:
           - "**/*.jsonl"
 ---
 
-# The Mind of Tashi — live gameplay traces (private)
+# The Mind of Tashi — live gameplay traces
 
 Every row in this dataset is **one complete match** between a real human
 player and the Mind of Tashi AI. Each row is a single multi-turn `messages`
@@ -92,9 +92,9 @@ single-turn rows). Mixing both at SFT time gives:
 - the synthetic short-turn rows: high persona diversity, lots of moves
 - these live multi-turn rows: real pattern reading across whole matches
 
-**This repo is private.** Real players' moves are recorded; while no
-usernames or personal identifiers are stored in the SFT-target portion,
-the metadata may include the leaderboard display name. Treat accordingly.
+**Privacy note.** Real players' moves are recorded; no personal
+identifiers are stored in the SFT-target portion, and the metadata only
+carries the (already public) leaderboard display name.
 
 ## Schema
 
@@ -187,15 +187,16 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--repo", type=str,
                         default=os.environ.get(
                             "LIVE_TRACES_REPO",
-                            "kshitijthakkar/mind-of-tashi-live-traces",
+                            "build-small-hackathon/mind-of-tashi-live-traces",
                         ),
                         help="target HF Dataset repo (default from "
-                             "LIVE_TRACES_REPO env or kshitijthakkar/mind-of-tashi-live-traces)")
+                             "LIVE_TRACES_REPO env or build-small-hackathon/mind-of-tashi-live-traces)")
     parser.add_argument("--live-dir", type=str,
                         default=str(REPO_ROOT / "data" / "live"),
                         help="local live-traces directory (default ../data/live/)")
-    parser.add_argument("--public", action="store_true",
-                        help="create repo as PUBLIC (default: private)")
+    parser.add_argument("--private", action="store_true",
+                        help="create repo as PRIVATE (default: public — "
+                             "live traces ship in the Sharing-is-Caring bundle)")
     parser.add_argument("--dry-run", action="store_true",
                         help="list sealed files; push nothing")
     parser.add_argument("--commit-message", type=str, default=None,
@@ -217,7 +218,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         return
 
     total_kb = sum(p.stat().st_size for p in sealed) / 1024
-    print(f"[push_live] target repo: {args.repo} (private={not args.public})")
+    print(f"[push_live] target repo: {args.repo} (private={args.private})")
     print(f"[push_live] live dir:    {live_dir}")
     print(f"[push_live] will upload {len(sealed)} sealed match files "
           f"({total_kb / 1024:.1f} MB):")
@@ -230,7 +231,7 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     from huggingface_hub import HfApi, create_repo
 
-    private = not args.public
+    private = args.private
     create_repo(
         repo_id=args.repo,
         repo_type="dataset",
