@@ -13,13 +13,10 @@ transformers>=5.5
 torch>=2.8
 accelerate
 huggingface_hub>=0.27.0
-# llama.cpp runtime for the self-play CHALLENGER roster (SELFPLAY_MODE=1):
-# challenger GGUFs (our SFT/GRPO micro, MiniCPM5-1B, Nemotron-4B) run
-# in-process on CPU — separate from the house opponent's transformers/ZeroGPU
-# backend, and still Off-the-Grid (local inference, no cloud API).
-# PREBUILT CPU WHEEL ONLY: compiling from the PyPI sdist OOM-kills the Space
-# build container (exit 137). The abetlen index ships manylinux cp38-cp313
-# wheels for ==0.3.19; if install fails anyway, the challenger roster falls
-# back to the transformers/(Zero)GPU path automatically (selfplay_live).
---extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
-llama-cpp-python==0.3.19
+# NO llama-cpp-python here, deliberately: compiling the PyPI sdist OOM-kills
+# the Space build container (exit 137), and the abetlen prebuilt "manylinux"
+# CPU wheels are actually musl-linked (libc.musl-x86_64.so.1 missing at
+# import on the glibc Space image). The self-play CHALLENGER roster therefore
+# runs its safetensors tf_spec via transformers on this Space (loaded to CPU
+# at request time, hopped onto the GPU inside @spaces.GPU) — still local,
+# still Off-the-Grid. GGUF/llama.cpp remains the local + Docker path.

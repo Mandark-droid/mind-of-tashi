@@ -124,31 +124,57 @@ _player_teacher = None
 _opponent_teacher = None
 _challenger_teachers: Dict[str, Any] = {}
 _prewarmed: set = set()
+_llamacpp_ok: Optional[bool] = None
+
+
+def _llamacpp_available() -> bool:
+    """True when llama_cpp actually imports (the wheel can be installed but
+    fail at .so load — e.g. musl-linked builds on a glibc image)."""
+    global _llamacpp_ok
+    if _llamacpp_ok is None:
+        try:
+            import llama_cpp  # noqa: F401
+            _llamacpp_ok = True
+        except Exception as exc:
+            print(f"[selfplay] llama_cpp unavailable: {exc}")
+            _llamacpp_ok = False
+    return _llamacpp_ok
 
 
 def prewarm(challenger: Optional[str] = None) -> str:
-    """Fire-and-forget GGUF download for a roster pick (default pick if None).
+    """Fire-and-forget weight download for a roster pick (default if None).
 
     The first watch-mode round otherwise stalls for the whole multi-hundred-MB
     fetch; warming on app boot + on picker change means the weights are
-    already in the HF cache by the time the watcher clicks. Download only —
-    the llama.cpp context is still built lazily on first use."""
+    already in the HF cache by the time the watcher clicks. Downloads the
+    artifact the teacher will actually use: the GGUF when llama.cpp works in
+    this runtime, the tf_spec safetensors snapshot otherwise."""
     if not SELFPLAY_MODE:
         return "selfplay off"
     name = challenger if challenger in CHALLENGERS else _DEFAULT_CHALLENGER
-    spec = _space_safe(CHALLENGERS[name]["spec"])
+    entry = CHALLENGERS[name]
+    spec = _space_safe(entry["spec"])
     head, _, tail = spec.partition(":")
     repo, _, fname = tail.partition(":")
-    if head != "llamacpp" or not repo or not fname:
+    if head == "llamacpp" and repo and fname and not _llamacpp_available():
+        tf_spec = entry.get("tf_spec", "")
+        if tf_spec.startswith("transformers:"):
+            repo, fname = tf_spec.partition(":")[2], None  # snapshot, not one file
+        else:
+            return "nothing to prewarm (llama.cpp unavailable, no tf_spec)"
+    elif head != "llamacpp" or not repo or not fname:
         return "nothing to prewarm"
-    key = f"{repo}/{fname}"
+    key = f"{repo}/{fname or '*'}"
     if key in _prewarmed:
         return f"already warm: {key}"
 
     def _dl():
         try:
-            from huggingface_hub import hf_hub_download  # lazy
-            hf_hub_download(repo_id=repo, filename=fname)
+            from huggingface_hub import hf_hub_download, snapshot_download  # lazy
+            if fname:
+                hf_hub_download(repo_id=repo, filename=fname)
+            else:
+                snapshot_download(repo_id=repo)
             print(f"[selfplay] prewarmed {key}")
         except Exception as exc:
             _prewarmed.discard(key)  # let a later request retry

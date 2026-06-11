@@ -140,9 +140,11 @@ needed. `BACKEND=transformers` selects the ZeroGPU path.
 
 With `SELFPLAY_MODE=1` the intro card grows a **Watch self-play** button and a
 challenger picker: choose who climbs the mountain, take your hands off, and
-watch both mind-scrolls reason against each other through the same UI. The
-**challenger roster** is all local GGUFs run in-process via llama.cpp (CPU —
-no ZeroGPU minutes, no cloud API):
+watch both mind-scrolls reason against each other through the same UI. Every
+**challenger** is local inference — GGUF via llama.cpp on a clone/Docker; on
+the deployed ZeroGPU Space the same checkpoints load as safetensors (to CPU,
+then onto the GPU inside `@spaces.GPU` per generation). No cloud API either
+way:
 
 | Challenger | Why it's here |
 |---|---|
@@ -156,17 +158,16 @@ The defender is always the **house mind** — the Space's own deployed opponent
 grammar-locked Oath all live. Watch-mode matches never touch the leaderboard
 or the live-traces dataset, and human games are completely unaffected by the
 flag. On a Space, cloud/API teacher specs are refused outright — self-play is
-Off-the-Grid by construction. If llama.cpp isn't available in the runtime,
-challengers fall back automatically to the same checkpoints as safetensors on
-the **transformers/(Zero)GPU** path — local either way.
+Off-the-Grid by construction. The runtime picks the challenger path
+automatically: llama.cpp where it imports, transformers/(Zero)GPU otherwise.
 
 ## Bonus badges targeted
 
 - **Off the Grid** — the opponent runs locally (ZeroGPU transformers in-Space, or
   llama.cpp on a clone); no cloud API at request time.
-- **Llama Champion** — the GGUF student runs through the llama.cpp runtime: the
-  Docker / local path, **and in the deployed Space itself** (the self-play
-  challenger roster is llama.cpp end-to-end).
+- **Llama Champion** — the GGUF student runs through the llama.cpp runtime (the
+  Docker / local path; the published `-gguf` repos are the same weights the
+  self-play roster fields).
 - **Off-Brand** — fully custom frontend on `gradio.Server` (Gradio 6).
 - **Well-Tuned** — a fine-tuned custom-MoE student (SFT + GRPO), shipped as both
   safetensors and GGUF.

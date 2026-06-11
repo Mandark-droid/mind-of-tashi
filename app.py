@@ -389,6 +389,7 @@ async def player_turn(state_json: str) -> str:
             "backend": result.meta.get("reasoner_backend")
                        or result.meta.get("backend"),
             "model": result.meta.get("model"),
+            "load_error": result.meta.get("reasoner_error"),
         })
     except Exception as exc:
         print(f"[selfplay] player_turn failed: {exc}")

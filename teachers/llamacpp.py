@@ -40,6 +40,7 @@ class LlamaCppTeacher(Teacher):
                 "backend": self.name,
                 "model": self._model,
                 "reasoner_backend": self._reasoner.backend,
+                "reasoner_error": self._reasoner.load_error,
             },
         )
 
@@ -56,5 +57,9 @@ class TransformersTeacher(LlamaCppTeacher):
 
     def __init__(self, repo: str) -> None:
         from llm import Reasoner
-        self._reasoner = Reasoner(backend="transformers", tf_repo=repo)
+        # tf_device='cpu': challengers are built at REQUEST time, and ZeroGPU
+        # forbids cuda init outside @spaces.GPU after boot. llm._tf_generate
+        # hops the model onto the GPU inside the decorated call instead.
+        self._reasoner = Reasoner(backend="transformers", tf_repo=repo,
+                                  tf_device="cpu")
         self._model = repo

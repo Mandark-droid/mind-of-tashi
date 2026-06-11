@@ -82,19 +82,23 @@ except Exception:  # spaces not installed
 _TF_CACHE: Dict[str, tuple] = {}
 
 
-def _load_transformers(repo: Optional[str] = None) -> None:
-    """Load a safetensors checkpoint to cuda. ZeroGPU's CUDA-emulation
-    makes `.to('cuda')` work outside @spaces.GPU; real CUDA is used inside
-    _tf_generate. transformers is the model's *native* runtime, so the
-    mind-scrolls are faithful (the norm_topk_prob issue was llama.cpp-only)."""
+def _load_transformers(repo: Optional[str] = None,
+                       device: Optional[str] = None) -> None:
+    """Load a safetensors checkpoint. The house model loads to cuda at boot
+    (ZeroGPU's CUDA-emulation intercepts startup-time `.to('cuda')`); models
+    loaded at REQUEST time (self-play challengers) MUST pass device='cpu' —
+    ZeroGPU refuses cuda init outside @spaces.GPU after boot. _tf_generate
+    hops cpu-resident models onto the GPU inside the decorated call instead.
+    transformers is the model's *native* runtime, so the mind-scrolls are
+    faithful (the norm_topk_prob issue was llama.cpp-only)."""
     repo = repo or TF_MODEL_REPO
     if repo in _TF_CACHE:
         return
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    # "cuda" on ZeroGPU (its CUDA-emulation makes this work at startup). Override
-    # TF_DEVICE=cpu for a GPU-less local clone (slow but functional).
-    device = os.environ.get("TF_DEVICE", "cuda")
+    # Default "cuda" on ZeroGPU (boot-time emulation). Override TF_DEVICE=cpu
+    # for a GPU-less local clone (slow but functional).
+    device = device or os.environ.get("TF_DEVICE", "cuda")
     tok = AutoTokenizer.from_pretrained(repo, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
         repo, torch_dtype=torch.bfloat16, trust_remote_code=True,
@@ -108,56 +112,72 @@ def _tf_generate(messages: List[Dict], max_new_tokens: int,
                  repo: Optional[str] = None) -> Dict:
     """Generate one completion on the (ZeroGPU) GPU and return it in the OpenAI
     chat shape — message content + per-token top-K logprobs — so the Conviction
-    Meter / parse path are reused unchanged across both backends."""
+    Meter / parse path are reused unchanged across both backends.
+
+    CPU-resident models (request-time challenger loads) are moved to the GPU
+    here — inside @spaces.GPU, where real CUDA exists — and moved back after,
+    since ZeroGPU reclaims the device between calls."""
     import torch
     tok, model = _TF_CACHE[repo or TF_MODEL_REPO]
-    # apply_chat_template returns a BatchEncoding (dict) in transformers 5.x;
-    # splat it into generate so input_ids + attention_mask both go through.
-    enc = tok.apply_chat_template(
-        messages, add_generation_prompt=True, return_tensors="pt", return_dict=True,
-    )
-    enc = {k: v.to(model.device) for k, v in enc.items()}
-    prompt_len = enc["input_ids"].shape[1]
-    do_sample = bool(temperature and temperature > 0.0)
-    with torch.no_grad():
-        gen = model.generate(
-            **enc,
-            max_new_tokens=max_new_tokens,
-            do_sample=do_sample,
-            temperature=(temperature if do_sample else None),
-            top_p=(top_p if do_sample else None),
-            output_scores=True,
-            return_dict_in_generate=True,
-            pad_token_id=(tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id),
+    moved = False
+    if model.device.type == "cpu" and torch.cuda.is_available():
+        model.to("cuda")
+        moved = True
+    try:
+        # apply_chat_template returns a BatchEncoding (dict) in transformers 5.x;
+        # splat it into generate so input_ids + attention_mask both go through.
+        enc = tok.apply_chat_template(
+            messages, add_generation_prompt=True, return_tensors="pt", return_dict=True,
         )
-    gen_ids = gen.sequences[0][prompt_len:]
-    text = tok.decode(gen_ids, skip_special_tokens=True)
-    content: List[Dict] = []
-    for i, step_logits in enumerate(gen.scores):
-        if i >= len(gen_ids):
-            break
-        lp = torch.log_softmax(step_logits[0].float(), dim=-1)
-        tid = int(gen_ids[i].item())
-        k = min(CONVICTION_TOPK, lp.shape[-1])
-        topk = torch.topk(lp, k=k)
-        top = [{"token": tok.decode([int(idx)]), "logprob": float(v)}
-               for v, idx in zip(topk.values.tolist(), topk.indices.tolist())]
-        content.append({"token": tok.decode([tid]),
-                        "logprob": float(lp[tid].item()), "top_logprobs": top})
-    return {"choices": [{"message": {"content": text},
-                         "logprobs": {"content": content}}]}
+        enc = {k: v.to(model.device) for k, v in enc.items()}
+        prompt_len = enc["input_ids"].shape[1]
+        do_sample = bool(temperature and temperature > 0.0)
+        with torch.no_grad():
+            gen = model.generate(
+                **enc,
+                max_new_tokens=max_new_tokens,
+                do_sample=do_sample,
+                temperature=(temperature if do_sample else None),
+                top_p=(top_p if do_sample else None),
+                output_scores=True,
+                return_dict_in_generate=True,
+                pad_token_id=(tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id),
+            )
+        gen_ids = gen.sequences[0][prompt_len:]
+        text = tok.decode(gen_ids, skip_special_tokens=True)
+        content: List[Dict] = []
+        for i, step_logits in enumerate(gen.scores):
+            if i >= len(gen_ids):
+                break
+            lp = torch.log_softmax(step_logits[0].float(), dim=-1)
+            tid = int(gen_ids[i].item())
+            k = min(CONVICTION_TOPK, lp.shape[-1])
+            topk = torch.topk(lp, k=k)
+            top = [{"token": tok.decode([int(idx)]), "logprob": float(v)}
+                   for v, idx in zip(topk.values.tolist(), topk.indices.tolist())]
+            content.append({"token": tok.decode([tid]),
+                            "logprob": float(lp[tid].item()), "top_logprobs": top})
+        return {"choices": [{"message": {"content": text},
+                             "logprobs": {"content": content}}]}
+    finally:
+        if moved:
+            model.to("cpu")
+            torch.cuda.empty_cache()
 
 
 class Reasoner:
     def __init__(self, repo: Optional[str] = None, filename: Optional[str] = None,
-                 backend: Optional[str] = None, tf_repo: Optional[str] = None) -> None:
+                 backend: Optional[str] = None, tf_repo: Optional[str] = None,
+                 tf_device: Optional[str] = None) -> None:
         """repo/filename override MODEL_REPO/MODEL_FILE (llama.cpp path);
-        tf_repo overrides TF_MODEL_REPO (transformers path); backend overrides
-        the BACKEND env. All exist for the self-play challenger roster, which
-        loads a *different* model per challenger while the Space's house
-        opponent keeps its own backend untouched."""
+        tf_repo/tf_device override the transformers path (challengers pass
+        tf_device='cpu' — request-time cuda loads are forbidden on ZeroGPU);
+        backend overrides the BACKEND env. All exist for the self-play
+        challenger roster, which loads a *different* model per challenger
+        while the Space's house opponent keeps its own backend untouched."""
         self.llm = None
         self.backend = "mock"
+        self.load_error: Optional[str] = None  # why we fell back, if we did
         self._tf_repo = tf_repo or TF_MODEL_REPO
         if FORCE_MOCK:
             return
@@ -166,11 +186,12 @@ class Reasoner:
             return
         if backend == "transformers":
             try:
-                _load_transformers(self._tf_repo)
+                _load_transformers(self._tf_repo, device=tf_device)
                 self.backend = "transformers"
                 print(f"[llm] backend: transformers (ZeroGPU-ready) [{self._tf_repo}]")
             except Exception as exc:
                 print(f"[llm] transformers backend failed ({exc}); falling back to mock")
+                self.load_error = f"transformers: {exc}"
                 self.backend = "mock"
             return
         # --- llama.cpp (default; Off-the-Grid + Llama Champion) ---
@@ -196,6 +217,7 @@ class Reasoner:
             self.backend = "llama.cpp"
         except Exception as exc:  # llama_cpp missing, or model not fetched yet
             print(f"[llm] falling back to mock opponent: {exc}")
+            self.load_error = f"llama.cpp: {exc}"
             self.llm = None
             self.backend = "mock"
 
