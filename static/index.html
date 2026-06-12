@@ -1827,7 +1827,23 @@
     } catch (e) {
       stopReadingRotation();
       $("think").className = "think";
-      $("think").textContent = "The duel needs its backend. Run `python app.py` and open the served page.";
+      // Surface the REAL failure. The old canned "run python app.py" hint
+      // only fits local dev; on the Space the usual culprits are ZeroGPU
+      // quota exhaustion or a dropped queue connection after a restart.
+      const msg = String((e && e.message) || e || "unknown error");
+      if (/quota|GPU/i.test(msg)){
+        $("think").textContent = "The mountain rests — ZeroGPU quota is spent for now. " +
+          "Sign in to Hugging Face for a bigger allowance, or return in a little while.";
+      } else if (/connect|closed|fetch|network/i.test(msg)){
+        $("think").textContent = "The connection to the mountain dropped (the Space may have restarted) — reload the page and the duel resumes.";
+        client = null;  // force a fresh queue connection on the next commit
+      } else {
+        $("think").textContent = "The duel hit an error: " + msg.slice(0, 200);
+      }
+      if (selfplayMode){
+        addLog(`<i>self-play paused: ${escapeHtml(msg.slice(0, 160))}</i>`);
+        selfplayMode = false;
+      }
       busy = false; renderMoves(); return;
     }
     stopReadingRotation();
