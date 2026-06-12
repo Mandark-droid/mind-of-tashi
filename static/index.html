@@ -1664,6 +1664,11 @@
     $("plSprite").innerHTML = spriteSVG("idle", playerPalette);
     $("oppSprite").innerHTML = spriteSVG("idle", oppPalette);
     $("fx").innerHTML = ""; renderMoves(); renderState(); renderPips(); renderLadder();
+    // Watch-mode: re-arm the auto-commit loop for EVERY new fight. The
+    // per-round rescheduler only fires on "continue" rounds, so without this
+    // the loop died at each match transition (advance auto-click or
+    // "Take the path again") and the duel sat at "sizing you up" forever.
+    if (selfplayMode) setTimeout(selfplayCommit, 1200);
   }
 
   function renderMoves(){
@@ -2810,10 +2815,12 @@
       // hide the identity block — no human is competing in self-play
       $("identBlock").style.display = "none";
       $("overlay").classList.add("hide");
+      // newFight() schedules selfplayCommit itself (selfplayMode is set) —
+      // no extra timer here, or two loops could race on fast rounds. Log
+      // AFTER newFight: it clears the round log.
+      newFight();
       addLog(`<i>watch-mode: ${escapeHtml(selfplayChallengerLabel || META.selfplay.player_teacher)} challenges ${escapeHtml(houseLabel)}</i>`);
       addLog(`<i>first summon loads the challenger's weights — the opening read can take a moment</i>`);
-      newFight();
-      setTimeout(selfplayCommit, 900);
     };
   }
 </script>
