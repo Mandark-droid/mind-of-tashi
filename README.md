@@ -80,16 +80,36 @@ Hindi/Sanskrit (IAST) code-switched register — 10–100× smaller (active) tha
 the frontier APIs it learned from. It ships as a Q4_K_M GGUF and runs in-Space
 via llama.cpp: **no cloud API at runtime.**
 
-## The six-artifact bundle
+## The bundle
 
-This Space is one of six linked artifacts:
+This Space is the centrepiece of one linked
+[collection](https://huggingface.co/collections/build-small-hackathon/the-mind-of-tashi-6a27107214f1265b159ade35):
 
 1. **Game / Space** — you are here.
 2. **Self-play dataset** — [`mind-of-tashi-selfplay`](https://huggingface.co/datasets/build-small-hackathon/mind-of-tashi-selfplay)
 3. **SFT model + GGUF** — [`mind-of-tashi-micro-sft`](https://huggingface.co/build-small-hackathon/mind-of-tashi-micro-sft) · [`-sft-gguf`](https://huggingface.co/build-small-hackathon/mind-of-tashi-micro-sft-gguf)
 4. **OpenEnv gym** — [`mind-of-tashi-env`](https://huggingface.co/spaces/build-small-hackathon/mind-of-tashi-env)
 5. **GRPO model + GGUF** — [`mind-of-tashi-micro-grpo`](https://huggingface.co/build-small-hackathon/mind-of-tashi-micro-grpo) · [`-grpo-gguf`](https://huggingface.co/build-small-hackathon/mind-of-tashi-micro-grpo-gguf)
-6. **Deployed Space** — this one, with the fine-tuned GGUF wired in.
+6. **Mini student (1B MoE) + LoRA** — [`mind-of-tashi-mini-sft`](https://huggingface.co/build-small-hackathon/mind-of-tashi-mini-sft) · [`-lora`](https://huggingface.co/build-small-hackathon/mind-of-tashi-mini-sft-lora) — the bigger sibling, playable in self-play.
+7. **Live gameplay traces** — [`mind-of-tashi-live-traces`](https://huggingface.co/datasets/build-small-hackathon/mind-of-tashi-live-traces) — real matches, sealed + pushed from this Space as they finish.
+8. **Leaderboard runs** — [`mind-of-tashi-runs`](https://huggingface.co/datasets/build-small-hackathon/mind-of-tashi-runs)
+
+## The numbers
+
+**Format gate** — 20 unseen game states across all 10 personas; valid =
+`<think>` block + parseable move JSON + legal move:
+
+| Model | greedy | sampled (the game's decode) |
+|---|---|---|
+| micro SFT (0.4B, 200M active) | 20/20 | — |
+| mini SFT (1B, 610M active) | 18/20 | **20/20** |
+
+**RL vs scale, head-to-head** — watch-mode duels on this very Space (mini as
+challenger vs the GRPO micro as the house mind): the **200M-active GRPO model
+beats the 610M-active SFT model decisively** — two-round finishes, the house
+barely scratched. Imitation learns the format; reinforcement learns the
+*game*. Reproduce it in two clicks: pick "Tashi mini SFT" in the self-play
+picker below the main button and watch.
 
 ## The moves
 
