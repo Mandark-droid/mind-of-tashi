@@ -31,6 +31,7 @@ models:
   - build-small-hackathon/mind-of-tashi-micro-sft-gguf
   - build-small-hackathon/mind-of-tashi-micro-grpo
   - build-small-hackathon/mind-of-tashi-micro-grpo-gguf
+  - build-small-hackathon/mind-of-tashi-mini-sft
   - openbmb/MiniCPM5-1B-GGUF
   - nvidia/Nemotron-Mini-4B-Instruct
 datasets:
@@ -150,6 +151,7 @@ way:
 |---|---|
 | **Tashi micro GRPO** (0.4B MoE, ours) | the RL-trained student — our best read |
 | **Tashi micro SFT** (0.4B MoE, ours) | the pre-GRPO checkpoint, for A/B-ing the training story |
+| **Tashi mini SFT** (1B MoE, ours) | the bigger sibling student — LoRA-tuned on the same corpus, 3× the active params |
 | **MiniCPM5 1B** (OpenBMB) | sponsor-class small — can it out-read a model half its size? |
 | **Nemotron Mini 4B** (NVIDIA) | the big sibling — 20× the active params, same blind commit |
 

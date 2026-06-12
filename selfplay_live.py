@@ -86,6 +86,13 @@ CHALLENGERS: Dict[str, Dict[str, str]] = {
         "spec": "llamacpp:build-small-hackathon/mind-of-tashi-micro-sft-gguf:mind-of-tashi-micro-sft-Q4_K_M.gguf",
         "tf_spec": "transformers:build-small-hackathon/mind-of-tashi-micro-sft",
     },
+    # The mini student: LoRA SFT on the same self-play corpus, ~3x the micro's
+    # active params. No GGUF (yet) — transformers is its native path, and
+    # _challenger_teacher handles a transformers-head primary spec directly.
+    "tashi-mini": {
+        "label": "Tashi mini SFT · 1B MoE (ours)",
+        "spec": "transformers:build-small-hackathon/mind-of-tashi-mini-sft",
+    },
     "minicpm5-1b": {
         "label": "MiniCPM5 1B (OpenBMB)",
         "spec": "llamacpp:openbmb/MiniCPM5-1B-GGUF:MiniCPM5-1B-Q4_K_M.gguf",
